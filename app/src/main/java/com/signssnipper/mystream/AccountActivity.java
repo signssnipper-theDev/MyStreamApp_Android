@@ -1,6 +1,7 @@
 package com.signssnipper.mystream;
 
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.graphics.Color;
 import android.os.Bundle;
 import android.view.Gravity;
@@ -55,12 +56,32 @@ public class AccountActivity extends Activity {
         web.setWebViewClient(new WebViewClient() {
             @Override
             public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest req) {
+                // Google blocks its sign-in inside apps ("This browser or app may not be
+                // secure"). Stop before Google's error page and explain what works instead.
+                String host = req.getUrl().getHost();
+                if (host != null && (host.equals("accounts.google.com") || host.endsWith(".accounts.google.com"))) {
+                    showGoogleNotice();
+                    return true;
+                }
                 return false;
             }
         });
         root.addView(web, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1));
         setContentView(root);
         web.loadUrl("https://www.tango.me/");
+    }
+
+    private long noticeAt = 0;
+
+    private void showGoogleNotice() {
+        if (System.currentTimeMillis() - noticeAt < 3000) return;
+        noticeAt = System.currentTimeMillis();
+        new AlertDialog.Builder(this)
+                .setTitle("Use Email or Phone sign-in")
+                .setMessage("Google blocks its sign-in inside apps like this one, so please choose \"Continue with Email\" or \"Continue with Phone\" instead.\n\n"
+                        + "If your Tango account was created with Google only, add an email address or phone number to it first in the Tango app (in its account settings, if it offers that), then sign in here with that.")
+                .setPositiveButton("OK", null)
+                .show();
     }
 
     private void finishAndReturn() {

@@ -144,15 +144,23 @@ html.sp-anon .sp-chat .ln b{display:none;}
 
   // ---------- cells ----------
   function styleInner(f) {
+    // Show only the video, as large as the cell allows, placed on whole screen
+    // pixels (no half-pixel offsets, which blur the picture) and without filters
+    // unless a picture setting is switched on.
     try {
       const d = f.contentDocument, c = window.__spFindVid(d);
       if (!c) return;
       let s = d.getElementById('vo');
       if (!s) { s = d.createElement('style'); s.id = 'vo'; d.head.appendChild(s); }
-      const iw = c.tagName === 'VIDEO' ? c.videoWidth : c.width, ih = c.tagName === 'VIDEO' ? c.videoHeight : c.height;
-      const w = (iw || 720) / dpr, h = (ih || 1280) / dpr;
-      s.textContent = `body *{visibility:hidden !important;} html,body{background:#000 !important;}
-        [data-sp-v]{visibility:visible !important;position:fixed !important;top:50% !important;left:50% !important;transform:translate(-50%,-50%) !important;width:${w}px !important;height:${h}px !important;max-width:100vw !important;max-height:100vh !important;object-fit:contain !important;filter:contrast(1.08) saturate(1.12) brightness(1.03) !important;}`;
+      const iw = (c.tagName === 'VIDEO' ? c.videoWidth : c.width) || 720, ih = (c.tagName === 'VIDEO' ? c.videoHeight : c.height) || 1280;
+      const vw = f.contentWindow.innerWidth || f.clientWidth, vh = f.contentWindow.innerHeight || f.clientHeight;
+      const r = f.contentWindow.devicePixelRatio || dpr;
+      const k = Math.min(vw * r / iw, vh * r / ih);
+      const dw = Math.max(1, Math.floor(iw * k)), dh = Math.max(1, Math.floor(ih * k));
+      const left = Math.floor((vw * r - dw) / 2) / r, top = Math.floor((vh * r - dh) / 2) / r;
+      const css = `body *{visibility:hidden !important;} html,body{background:#000 !important;}
+        [data-sp-v]{visibility:visible !important;position:fixed !important;left:${left}px !important;top:${top}px !important;right:auto !important;bottom:auto !important;margin:0 !important;transform:none !important;width:${dw / r}px !important;height:${dh / r}px !important;max-width:none !important;max-height:none !important;object-fit:contain !important;filter:none !important;}`;
+      if (s.textContent !== css) s.textContent = css;
     } catch (e) {}
   }
   // ---------- per-cell zoom ----------
@@ -172,7 +180,7 @@ html.sp-anon .sp-chat .ln b{display:none;}
       let st = d.getElementById('sp-zoom-style');
       if (!st) { st = d.createElement('style'); st.id = 'sp-zoom-style'; d.head.appendChild(st); }
       st.textContent = z.z > 1.001
-        ? `html body [data-sp-v]{transform:translate(calc(-50% + ${z.x.toFixed(1)}px),calc(-50% + ${z.y.toFixed(1)}px)) scale(${z.z.toFixed(3)}) !important;transform-origin:center center !important;}`
+        ? `html body [data-sp-v]{transform:translate(${z.x.toFixed(1)}px,${z.y.toFixed(1)}px) scale(${z.z.toFixed(3)}) !important;transform-origin:center center !important;}`
         : '';
     } catch (e) {}
   }
@@ -327,6 +335,7 @@ html.sp-anon .sp-chat .ln b{display:none;}
     }
     grid.style.gridTemplateColumns = `repeat(${best}, minmax(0, 1fr))`;
     grid.style.gridTemplateRows = `repeat(${Math.ceil(n / best)}, minmax(0, 1fr))`;
+    setTimeout(() => D.querySelectorAll('.sp-cell.live iframe').forEach(styleInner), 60);
   }
   function build(list) {
     (window.__spTimers || []).forEach(clearInterval); window.__spTimers = [];
@@ -382,8 +391,8 @@ html.sp-anon .sp-chat .ln b{display:none;}
 
   // ---------- picture ----------
   const OPT = {
-    sharp: { label: 'Sharpen', order: ['Off', 'Low', 'Medium', 'High'], val: { Off: 0, Low: 0.35, Medium: 0.7, High: 1.1 }, def: 'Medium' },
-    sat: { label: 'Saturation', order: ['Natural', 'Low', 'Medium', 'High'], val: { Natural: 1.0, Low: 1.12, Medium: 1.3, High: 1.5 }, def: 'Low' },
+    sharp: { label: 'Sharpen', order: ['Off', 'Low', 'Medium', 'High'], val: { Off: 0, Low: 0.35, Medium: 0.7, High: 1.1 }, def: 'Off' },
+    sat: { label: 'Saturation', order: ['Natural', 'Low', 'Medium', 'High'], val: { Natural: 1.0, Low: 1.12, Medium: 1.3, High: 1.5 }, def: 'Natural' },
     tone: { label: 'Color', order: ['Neutral', 'Warm', 'Warmer', 'Cool'], val: { Neutral: [1, 1, 1], Warm: [1.06, 1.0, 0.93], Warmer: [1.12, 1.01, 0.86], Cool: [0.94, 1.0, 1.07] }, def: 'Neutral' }
   };
   const cur = {};
@@ -406,7 +415,9 @@ html.sp-anon .sp-chat .ln b{display:none;}
       const useSvg = a > 0 || cur.tone !== 'Neutral';
       let st = d.getElementById('sp-fx-style');
       if (!st) { st = d.createElement('style'); st.id = 'sp-fx-style'; d.head.appendChild(st); }
-      st.textContent = `html body [data-sp-v]{filter:${useSvg ? 'url(#sp-fx) ' : ''}contrast(1.08) saturate(${OPT.sat.val[cur.sat]}) brightness(1.03) !important;}`;
+      const parts = (useSvg ? 'url(#sp-fx) ' : '') + (cur.sat !== 'Natural' ? 'saturate(' + OPT.sat.val[cur.sat] + ')' : '');
+      const want = parts.trim() ? `html body [data-sp-v]{filter:${parts.trim()} !important;}` : '';
+      if (st.textContent !== want) st.textContent = want;
     } catch (e) {}
   }
   const allFx = () => D.querySelectorAll('.sp-cell iframe').forEach(apply);
