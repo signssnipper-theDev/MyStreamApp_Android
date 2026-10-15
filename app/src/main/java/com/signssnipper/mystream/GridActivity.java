@@ -1,0 +1,135 @@
+package com.signssnipper.mystream;
+
+import android.app.Activity;
+import android.content.Intent;
+import android.graphics.Color;
+import android.os.Build;
+import android.os.Bundle;
+import android.view.View;
+import android.view.WindowInsets;
+import android.view.WindowInsetsController;
+import android.view.WindowManager;
+import android.webkit.CookieManager;
+import android.webkit.JavascriptInterface;
+import android.webkit.WebChromeClient;
+import android.webkit.WebResourceRequest;
+import android.webkit.WebSettings;
+import android.webkit.WebView;
+import android.webkit.WebViewClient;
+
+/**
+ * The stream grid. Loads a tango.me page and injects the same grid script the
+ * Windows app uses (assets/grid.js), so every cell is a same-origin Tango frame.
+ */
+public class GridActivity extends Activity {
+    static final String START = "https://www.tango.me/robots.txt";
+    static final int REQ_ACCOUNT = 1;
+
+    // Lets the grid's dock open the account and alerts screens. On a phone the
+    // dock starts shrunk to one "Controls" button to leave room for the streams.
+    static final String SHIM =
+            "window.mgvApp={openAccount:function(){MgvAndroid.openAccount()},openAlerts:function(){MgvAndroid.openAlerts()},log:function(){}};"
+            + "try{if(localStorage.getItem('sp_dock_small')===null)localStorage.setItem('sp_dock_small','1')}catch(e){}\n";
+
+    private WebView web;
+    private String gridJs;
+
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        gridJs = Util.asset(this, "grid.js");
+
+        web = new WebView(this);
+        web.setBackgroundColor(Color.parseColor("#0c1018"));
+        setContentView(web);
+        hideSystemBars();
+
+        WebSettings s = web.getSettings();
+        s.setJavaScriptEnabled(true);
+        s.setDomStorageEnabled(true);
+        s.setMediaPlaybackRequiresUserGesture(false);
+        s.setUserAgentString(Util.browserUserAgent(s.getUserAgentString()));
+
+        CookieManager cm = CookieManager.getInstance();
+        cm.setAcceptCookie(true);
+        cm.setAcceptThirdPartyCookies(web, true);
+
+        web.addJavascriptInterface(new Bridge(), "MgvAndroid");
+        web.setWebChromeClient(new WebChromeClient());
+        web.setWebViewClient(new WebViewClient() {
+            @Override
+            public void onPageFinished(WebView view, String url) {
+                if (url != null && url.startsWith(START)) view.evaluateJavascript(SHIM + gridJs, null);
+            }
+
+            @Override
+            public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest req) {
+                // Keep the main view on the grid page; frames navigate freely.
+                if (!req.isForMainFrame()) return false;
+                return !req.getUrl().toString().startsWith(START);
+            }
+        });
+        web.loadUrl(START);
+    }
+
+    class Bridge {
+        @JavascriptInterface
+        public void openAccount() {
+            runOnUiThread(() -> startActivityForResult(new Intent(GridActivity.this, AccountActivity.class), REQ_ACCOUNT));
+        }
+
+        @JavascriptInterface
+        public void openAlerts() {
+            runOnUiThread(() -> startActivity(new Intent(GridActivity.this, AlertsActivity.class)));
+        }
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        // Back from the Tango account screen: reload so every cell uses the new sign-in.
+        if (requestCode == REQ_ACCOUNT && web != null) web.reload();
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        if (web != null) web.onResume();
+        hideSystemBars();
+    }
+
+    @Override
+    protected void onPause() {
+        if (web != null) web.onPause();
+        super.onPause();
+    }
+
+    @Override
+    protected void onDestroy() {
+        if (web != null) web.destroy();
+        super.onDestroy();
+    }
+
+    @Override
+    public void onWindowFocusChanged(boolean hasFocus) {
+        super.onWindowFocusChanged(hasFocus);
+        if (hasFocus) hideSystemBars();
+    }
+
+    @SuppressWarnings("deprecation")
+    private void hideSystemBars() {
+        if (Build.VERSION.SDK_INT >= 30) {
+            WindowInsetsController c = getWindow().getInsetsController();
+            if (c != null) {
+                c.hide(WindowInsets.Type.statusBars() | WindowInsets.Type.navigationBars());
+                c.setSystemBarsBehavior(WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
+            }
+        } else {
+            getWindow().getDecorView().setSystemUiVisibility(
+                    View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY | View.SYSTEM_UI_FLAG_FULLSCREEN
+                            | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION | View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+                            | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN);
+        }
+    }
+}

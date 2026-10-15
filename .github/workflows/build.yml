@@ -1,0 +1,67 @@
+name: Build APK
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+
+      - name: Signing key (from repository secrets)
+        id: key
+        env:
+          KEYSTORE_B64: ${{ secrets.KEYSTORE_B64 }}
+        run: |
+          if [ -n "$KEYSTORE_B64" ]; then
+            echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/mystream.jks"
+            echo "file=$RUNNER_TEMP/mystream.jks" >> "$GITHUB_OUTPUT"
+            echo "kind=release" >> "$GITHUB_OUTPUT"
+          else
+            echo "No signing key secret yet: building a test (debug) APK."
+            echo "kind=debug" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build
+        env:
+          KEYSTORE_FILE: ${{ steps.key.outputs.file }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+        run: |
+          if [ "${{ steps.key.outputs.kind }}" = "release" ]; then
+            gradle --no-daemon assembleRelease
+            cp app/build/outputs/apk/release/app-release.apk "MyStream-v1.0.${GITHUB_RUN_NUMBER}.apk"
+          else
+            gradle --no-daemon assembleDebug
+            cp app/build/outputs/apk/debug/app-debug.apk "MyStream-v1.0.${GITHUB_RUN_NUMBER}-test.apk"
+          fi
+          ls -la MyStream-*.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: MyStream-v1.0.${{ github.run_number }}
+          path: MyStream-*.apk
+
+      - name: Publish as a release (download it on your phone)
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v1.0.${{ github.run_number }}
+          name: MyStream v1.0.${{ github.run_number }}
+          files: MyStream-*.apk
+          body: |
+            Open this page on your phone and tap the .apk file to download and install it.
+            ${{ steps.key.outputs.kind == 'debug' && 'This is a test build (no signing key secret set yet).' || '' }}

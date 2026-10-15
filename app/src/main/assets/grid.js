@@ -1,0 +1,414 @@
+// MultiGridView grid, v3 "Floating Dock" layout with the Side Dock palette.
+// Runs on a tango.me page (same origin as the Tango frames it embeds).
+(() => {
+  const KEY = 'sp_grid_users';
+  const dpr = devicePixelRatio;
+  const D = document, H = D.documentElement;
+  const store = { get: k => { try { return localStorage.getItem(k); } catch (e) { return null; } }, set: (k, v) => { try { localStorage.setItem(k, v); } catch (e) {} } };
+
+  // ---------- find the stream element inside a Tango frame ----------
+  window.__spFindVid = d => {
+    try {
+      const keep = d.querySelector('[data-sp-v]');
+      const dims = c => c.tagName === 'VIDEO' ? [c.videoWidth, c.videoHeight] : [c.width, c.height];
+      const ok = c => { const [w, h] = dims(c); return w >= 240 && h >= 240; };
+      const shown = c => { const r = c.getBoundingClientRect(); return r.width * r.height; };
+      const score = c => { const [w, h] = dims(c); return w * h * 1e6 + shown(c); };
+      let best = d.querySelector('canvas.kjPxA') || d.querySelector('canvas.KPCas');
+      if (best && !ok(best)) best = null;
+      if (!best && keep && keep.isConnected && ok(keep)) best = keep;
+      if (!best) best = [...d.querySelectorAll('canvas')].filter(ok).sort((a, b) => score(b) - score(a))[0] || null;
+      if (!best) best = [...d.querySelectorAll('video')].filter(ok).sort((a, b) => score(b) - score(a))[0] || null;
+      d.querySelectorAll('[data-sp-v]').forEach(e => { if (e !== best) e.removeAttribute('data-sp-v'); });
+      if (best && !best.hasAttribute('data-sp-v')) best.setAttribute('data-sp-v', '1');
+      return best;
+    } catch (e) { return null; }
+  };
+
+  // ---------- reset any previous run ----------
+  D.title = 'SystemProfiles';
+  clearInterval(window.__spTitle);
+  window.__spTitle = setInterval(() => { if (D.title !== 'SystemProfiles') D.title = 'SystemProfiles'; }, 1000);
+  (window.__spTimers || []).forEach(clearInterval); window.__spTimers = [];
+  [window.__spFxT, window.__spChatT, window.__spSndT, window.__spStatsT].forEach(clearInterval);
+  ['sp-root', 'sp-style', 'sp-fonts'].forEach(id => D.getElementById(id)?.remove());
+
+  // ---------- look ----------
+  const fonts = D.createElement('link');
+  fonts.id = 'sp-fonts'; fonts.rel = 'stylesheet';
+  fonts.href = 'https://fonts.googleapis.com/css2?family=Sora:wght@600;700&family=Figtree:wght@400;500;600;700&display=swap';
+  D.head.appendChild(fonts);
+  const css = D.createElement('style');
+  css.id = 'sp-style';
+  css.textContent = `
+#sp-root{--bg:#0c1018;--panel:#131a26;--raise:#172031;--line:#222c3d;--line2:#2a3549;--ink:#e3e8f2;--muted:#8d98ad;--accent:#4f7dff;--accent2:#7aa2ff;--tint:#1d2b4d;--live:#ff4d6a;--off:#4a5468;
+  position:fixed;inset:0;z-index:2147483647;background:var(--bg);color:var(--ink);font:13px/1.4 Figtree,system-ui,'Segoe UI',sans-serif;}
+html,body{background:#0c1018 !important;overflow:hidden !important;}
+body > *:not(#sp-root){display:none !important;}
+#sp-root button{font:600 13px Figtree,system-ui,sans-serif;color:var(--ink);background:var(--raise);border:1px solid var(--line2);border-radius:10px;padding:7px 13px;cursor:pointer;white-space:nowrap;}
+#sp-root button:hover{border-color:var(--accent2);}
+#sp-root button:focus-visible{outline:2px solid var(--accent2);outline-offset:2px;}
+#sp-root button.on{background:var(--tint);border-color:var(--accent);color:#cfe0ff;}
+#sp-root button.primary{background:var(--accent);border-color:var(--accent);color:#fff;}
+#sp-top{position:absolute;top:10px;left:12px;right:12px;height:32px;display:flex;align-items:center;gap:10px;}
+#sp-brand{font:700 15px Sora,system-ui,sans-serif;letter-spacing:.02em;display:flex;align-items:center;gap:8px;}
+#sp-brand i{width:11px;height:11px;border-radius:3px;background:var(--accent);display:block;}
+#sp-stats{margin-left:auto;background:var(--panel);border:1px solid var(--line);border-radius:999px;padding:6px 14px;font-variant-numeric:tabular-nums;color:var(--muted);}
+#sp-stats b{color:var(--ink);font-family:Sora,system-ui,sans-serif;}
+#sp-grid{position:absolute;top:52px;left:10px;right:10px;bottom:var(--gridb,92px);display:grid;gap:10px;min-height:0;}
+.sp-cell{position:relative;display:flex;flex-direction:column;background:var(--panel);border:1px solid var(--line);border-radius:14px;overflow:hidden;min-height:0;min-width:0;}
+.sp-head{display:flex;align-items:center;gap:6px;padding:6px 8px 6px 10px;}
+.sp-dot{width:8px;height:8px;border-radius:50%;background:var(--off);flex:none;}
+.sp-cell.live .sp-dot{background:var(--live);box-shadow:0 0 0 3px rgba(255,77,106,.2);}
+.sp-name{flex:1;min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;font-weight:600;}
+.sp-name .an{display:none;}
+html.sp-anon .sp-name .nm{display:none;} html.sp-anon .sp-name .an{display:inline;}
+.sp-st{color:var(--muted);font-weight:500;}
+.sp-vc{color:var(--muted);font-variant-numeric:tabular-nums;font-size:12px;margin-right:2px;}
+#sp-root .sp-ic{width:30px;height:28px;padding:0;display:grid;place-items:center;border-radius:8px;}
+#sp-root .sp-ic[disabled]{opacity:.4;cursor:default;}
+.sp-body{position:relative;flex:1;min-height:0;margin:0 6px 6px;border-radius:10px;overflow:hidden;background:#000;}
+.sp-body iframe{position:absolute;inset:0;width:100%;height:100%;border:0;background:#000;}
+.sp-cell:not(.live) iframe{opacity:.35;}
+.sp-cell.hidden iframe{opacity:0 !important;pointer-events:none;}
+html.sp-allhide #sp-grid{opacity:0 !important;pointer-events:none !important;}
+#sp-dock{position:absolute;left:12px;right:12px;bottom:14px;width:fit-content;margin:0 auto;display:flex;flex-wrap:wrap;align-items:stretch;background:var(--panel);border:1px solid var(--line2);border-radius:18px;box-shadow:0 10px 30px rgba(0,0,0,.45);padding:8px 4px;box-sizing:border-box;}
+.sp-sec{display:flex;flex-direction:column;gap:5px;padding:0 12px;}
+.sp-sec + .sp-sec{border-left:1px solid var(--line2);}
+.sp-sec h2{margin:0;font:700 10px Sora,system-ui,sans-serif;letter-spacing:.16em;color:var(--accent2);}
+.sp-row{display:flex;gap:6px;}
+#sp-root #sp-dockmin{position:absolute;right:-10px;top:-10px;width:24px;height:24px;padding:0;border-radius:50%;display:grid;place-items:center;font-size:12px;}
+html.sp-docksmall #sp-dock .sp-sec{display:none;}
+html.sp-docksmall #sp-dock{padding:6px;}
+#sp-root #sp-dockopen{display:none;}
+html.sp-docksmall #sp-root #sp-dockopen{display:block;}
+html.sp-docksmall #sp-root #sp-dockmin{display:none;}
+#sp-pop{position:absolute;left:12px;right:12px;bottom:var(--dockh,84px);margin:0 auto;width:min(560px,calc(100% - 24px));background:var(--panel);border:1px solid var(--line2);border-radius:16px;box-shadow:0 10px 30px rgba(0,0,0,.5);padding:14px;display:none;flex-direction:column;gap:10px;box-sizing:border-box;}
+#sp-pop.open{display:flex;}
+#sp-pop h2{margin:0;font:700 11px Sora,system-ui,sans-serif;letter-spacing:.16em;color:var(--accent2);}
+#sp-in{width:100%;box-sizing:border-box;min-height:70px;resize:vertical;background:var(--bg);color:var(--ink);border:1px solid var(--line2);border-radius:10px;padding:9px 11px;font:13px/1.5 Figtree,system-ui,sans-serif;outline:none;}
+#sp-in:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(79,125,255,.25);}
+html.sp-anon #sp-in{-webkit-text-security:disc;color:var(--muted);}
+#sp-pop p{margin:0;color:var(--muted);font-size:12px;}
+.sp-chat{position:absolute;left:6px;right:6px;bottom:6px;max-height:38%;overflow:hidden;display:flex;flex-direction:column;justify-content:flex-end;gap:3px;pointer-events:none;font:12px/1.35 Figtree,system-ui,sans-serif;}
+.sp-chat .ln{align-self:flex-start;max-width:100%;background:rgba(12,16,24,.72);color:#f2f4f8;padding:3px 8px;border-radius:9px;overflow-wrap:anywhere;}
+.sp-chat .ln b{color:var(--accent2);font-weight:700;margin-right:5px;}
+.sp-chat .ln.sys{color:#a9c2ff;font-style:italic;}
+html:not(.sp-chaton) .sp-chat{display:none;}
+html.sp-anon .sp-chat .ln b{display:none;}
+.sp-cell{container-type:inline-size;}
+@container (max-width:230px){.sp-st,.sp-vc{display:none;}.sp-head{gap:3px;padding:5px 5px 5px 8px;}#sp-root .sp-ic{width:24px;height:24px;border-radius:6px;}}
+.sp-empty{position:absolute;inset:0;display:grid;place-items:center;color:var(--muted);text-align:center;font-size:14px;}`;
+  D.head.appendChild(css);
+
+  const ICON = {
+    mute: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M11 5 6 9H3v6h3l5 4z"/><path d="m22 9-6 6M16 9l6 6"/></svg>',
+    sound: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M11 5 6 9H3v6h3l5 4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13"/></svg>',
+    eye: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M2.5 12S6 6 12 6s9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6z"/><circle cx="12" cy="12" r="2.5"/></svg>',
+    eyeOff: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 3l18 18"/><path d="M10.6 6.1A10 10 0 0 1 12 6c6 0 9.5 6 9.5 6a17 17 0 0 1-3 3.6M6.3 7.6A17 17 0 0 0 2.5 12S6 18 12 18a9 9 0 0 0 4-.9"/></svg>',
+    x: '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>'
+  };
+
+  // ---------- structure ----------
+  const root = D.createElement('div');
+  root.id = 'sp-root';
+  root.innerHTML = `
+<div id="sp-top"><div id="sp-brand"><i></i>SystemProfiles</div><div id="sp-stats"></div></div>
+<div id="sp-grid"></div>
+<div id="sp-pop" role="dialog" aria-label="Broadcaster list">
+  <h2>BROADCASTERS</h2>
+  <label for="sp-in" style="position:absolute;left:-9999px">Broadcaster list</label>
+  <textarea id="sp-in" spellcheck="false" placeholder="username1, username2, @username3"></textarea>
+  <p>Separate names with commas, spaces or new lines. Ctrl+Enter builds the grid.</p>
+  <div class="sp-row"><button class="primary" id="sp-go">Build grid</button><button id="sp-popclose">Close</button></div>
+</div>
+<div id="sp-dock">
+  <div class="sp-sec"><h2>BROADCASTERS</h2><div class="sp-row"><button id="sp-edit" class="primary">Edit list</button><button id="sp-rebuild">Rebuild</button></div></div>
+  <div class="sp-sec"><h2>VIEW</h2><div class="sp-row"><button id="sp-anon-btn"></button><button id="sp-allhide"></button><button id="sp-fs"></button></div></div>
+  <div class="sp-sec"><h2>PICTURE</h2><div class="sp-row"><button id="sp-fx-sharp"></button><button id="sp-fx-sat"></button><button id="sp-fx-tone"></button></div></div>
+  <div class="sp-sec"><h2>CHAT</h2><div class="sp-row"><button id="sp-chat-btn"></button></div></div>
+  ${window.mgvApp ? '<div class="sp-sec"><h2>ACCOUNT</h2><div class="sp-row"><button id="sp-acct">Tango account</button>' + (window.mgvApp.openAlerts ? '<button id="sp-alerts">Alerts</button>' : '') + '</div></div>' : ''}
+  <button id="sp-dockmin" title="Shrink controls" aria-label="Shrink controls">–</button>
+  <button id="sp-dockopen">Controls</button>
+</div>`;
+  D.body.appendChild(root);
+  const $ = id => D.getElementById(id);
+  const grid = $('sp-grid'), input = $('sp-in'), pop = $('sp-pop');
+  const parse = s => s.split(/[\s,;]+/).map(u => u.trim().replace(/^@/, '').replace(/^https?:\/\/(www\.)?tango\.me\//, '').replace(/\/.*$/, '')).filter(Boolean);
+
+  // ---------- cells ----------
+  function styleInner(f) {
+    try {
+      const d = f.contentDocument, c = window.__spFindVid(d);
+      if (!c) return;
+      let s = d.getElementById('vo');
+      if (!s) { s = d.createElement('style'); s.id = 'vo'; d.head.appendChild(s); }
+      const iw = c.tagName === 'VIDEO' ? c.videoWidth : c.width, ih = c.tagName === 'VIDEO' ? c.videoHeight : c.height;
+      const w = (iw || 720) / dpr, h = (ih || 1280) / dpr;
+      s.textContent = `body *{visibility:hidden !important;} html,body{background:#000 !important;}
+        [data-sp-v]{visibility:visible !important;position:fixed !important;top:50% !important;left:50% !important;transform:translate(-50%,-50%) !important;width:${w}px !important;height:${h}px !important;max-width:100vw !important;max-height:100vh !important;object-fit:contain !important;filter:contrast(1.08) saturate(1.12) brightness(1.03) !important;}`;
+    } catch (e) {}
+  }
+  // Tango's own live lookup (sent with your Tango sign-in if you're signed in).
+  // Returns {live:true,id} / {live:false} / null when it can't tell.
+  const lastLookup = {};
+  async function lookup(user) {
+    try {
+      const r = await fetch('https://gateway.tango.me/stream-details-provider/public/byAlias?alias=' + encodeURIComponent(user), { credentials: 'include', cache: 'no-store' });
+      lastLookup[user] = r.status;
+      if (r.status === 404) return { live: false };
+      if (r.status !== 200) return null;
+      const b = new Uint8Array(await r.arrayBuffer()); let s = '';
+      for (const x of b) s += String.fromCharCode(x);
+      const m = s.match(/\n\x16([A-Za-z0-9_-]{22})/);
+      return m ? { live: true, id: m[1] } : null;
+    } catch (e) { lastLookup[user] = 'error: ' + (e && e.message); return null; }
+  }
+  // Diagnostics (Windows app only): what a cell sees right now.
+  function diag(f, user, el, why) {
+    if (!window.mgvApp || !window.mgvApp.log) return;
+    let path = '', title = '', media = [], picked = '', testids = 0;
+    try { path = f.contentWindow.location.pathname; title = f.contentDocument.title; testids = f.contentDocument.querySelectorAll('[data-testid]').length;
+      media = [...f.contentDocument.querySelectorAll('canvas,video')].filter(c => (c.width || c.videoWidth) >= 240).map(c => c.tagName.toLowerCase() + '.' + (c.className && c.className.baseVal === undefined ? c.className : '') + ' ' + (c.width || c.videoWidth) + 'x' + (c.height || c.videoHeight));
+      const v = f.contentDocument.querySelector('[data-sp-v]'); picked = v ? v.tagName.toLowerCase() + '.' + v.className : ''; } catch (e) { path = 'unreadable: ' + (e && e.message); }
+    window.mgvApp.log({ why, user, lookup: lastLookup[user], live: el.classList.contains('live'), path, title, testids, media, picked });
+  }
+  function openUser(f, user) {
+    f.dataset.user = user;
+    clearInterval(f.__spNav);
+    let loadedAt = 0;
+    f.onload = () => {
+      f.onload = null; loadedAt = Date.now();
+      // Wait for Tango's app to render, then navigate in-app: straight to the live
+      // stream when the lookup finds one, otherwise to the profile.
+      f.__spNav = setInterval(async () => {
+        let d = null; try { d = f.contentDocument; } catch (e) {}
+        const ready = d && d.querySelector('[data-testid]');
+        if ((ready && Date.now() - loadedAt > 1500) || Date.now() - loadedAt > 8000) {
+          clearInterval(f.__spNav);
+          const info = await lookup(user);
+          const path = info && info.live && info.id ? '/stream/' + info.id : '/' + user;
+          try { const w = f.contentWindow; w.history.pushState({}, '', path); w.dispatchEvent(new PopStateEvent('popstate', { state: {} })); } catch (e) {}
+        }
+      }, 500);
+    };
+    f.src = 'https://www.tango.me/';
+  }
+  function cell(user, idx) {
+    const el = D.createElement('div');
+    el.className = 'sp-cell';
+    el.innerHTML = `<div class="sp-head"><span class="sp-dot"></span><span class="sp-name"><span class="nm"></span><span class="an"></span> <span class="sp-st">· checking…</span></span><span class="sp-vc"></span>
+      <button class="sp-ic sp-snd" title="Sound on/off" aria-label="Sound on/off">${ICON.mute}</button>
+      <button class="sp-ic sp-hide" title="Hide this stream" aria-label="Hide this stream">${ICON.eyeOff}</button>
+      <button class="sp-ic sp-x" title="Remove" aria-label="Remove">${ICON.x}</button></div>
+      <div class="sp-body"><iframe allow="autoplay; fullscreen"></iframe></div>`;
+    const f = el.querySelector('iframe'), nm = el.querySelector('.nm'), st = el.querySelector('.sp-st'), hide = el.querySelector('.sp-hide');
+    nm.textContent = '@' + user;
+    el.querySelector('.an').textContent = 'Cell ' + (idx + 1);
+    openUser(f, user);
+    hide.onclick = () => { const h = el.classList.toggle('hidden'); hide.innerHTML = h ? ICON.eye : ICON.eyeOff; hide.title = h ? 'Show this stream' : 'Hide this stream'; hide.classList.toggle('on', h); };
+    el.querySelector('.sp-x').onclick = () => { const list = parse(input.value); list.splice(idx, 1); input.value = list.join(', '); build(list); };
+    const url = () => { try { return f.contentWindow.location.href; } catch (e) { return ''; } };
+    const disp = () => { try { const t = f.contentDocument.title; return (t.match(/^(.*?) (Live Stream - Watch|\(@)/) || [])[1] || (f.contentDocument.querySelector('h1')?.textContent || '').trim().slice(0, 40); } catch (e) { return ''; } };
+    const check = () => {
+      const live = url().includes('/stream/') || (() => { try { return / Live Stream - Watch/.test(f.contentDocument.title || ''); } catch (e) { return false; } })();
+      el.classList.toggle('live', live);
+      if (live) styleInner(f);
+      const dn = disp();
+      nm.textContent = '@' + user + (dn ? ' (' + dn + ')' : '');
+      st.textContent = live ? '· LIVE' : '· not live';
+    };
+    window.__spTimers.push(setInterval(check, 4000));
+    // Every minute: if this cell isn't on a stream, ask the lookup and open the stream
+    // when it starts (a full reload every 5th minute as a fallback). If it is on a
+    // stream that has ended, go back to the profile.
+    let ticks = 0;
+    setTimeout(() => diag(f, user, el, 'start+30s'), 30000);
+    window.__spTimers.push(setInterval(async () => {
+      ticks++;
+      diag(f, user, el, 'minute');
+      const onStream = url().includes('/stream/');
+      const info = await lookup(user);
+      if (!onStream) { if (!info || info.live || ticks % 5 === 0) openUser(f, user); }
+      else if (info && !info.live) openUser(f, user);
+    }, 60000));
+    return el;
+  }
+  function layout(n) {
+    const W = grid.clientWidth || innerWidth - 20, Hh = grid.clientHeight || innerHeight - 150;
+    let best = 1, bestScore = 0;
+    for (let cols = 1; cols <= n; cols++) {
+      const rows = Math.ceil(n / cols), cw = W / cols, ch = Hh / rows - 46;
+      const vw = Math.min(cw, ch * 9 / 16);
+      if (vw > bestScore) { bestScore = vw; best = cols; }
+    }
+    grid.style.gridTemplateColumns = `repeat(${best}, minmax(0, 1fr))`;
+    grid.style.gridTemplateRows = `repeat(${Math.ceil(n / best)}, minmax(0, 1fr))`;
+  }
+  function build(list) {
+    (window.__spTimers || []).forEach(clearInterval); window.__spTimers = [];
+    store.set(KEY, JSON.stringify(list));
+    grid.innerHTML = '';
+    if (!list.length) { grid.innerHTML = '<div class="sp-empty">No broadcasters yet.<br>Click Edit list to add some.</div>'; grid.style.gridTemplateColumns = '1fr'; return; }
+    layout(list.length);
+    list.forEach((u, i) => grid.appendChild(cell(u, i)));
+  }
+  window.addEventListener('resize', () => { const n = grid.querySelectorAll('.sp-cell').length; if (n) layout(n); });
+  const dock = $('sp-dock');
+  const fitDock = () => {
+    const h = dock.offsetHeight + 14;
+    const small = H.classList.contains('sp-docksmall');
+    root.style.setProperty('--gridb', (small ? h + 10 : h + 12) + 'px');
+    root.style.setProperty('--dockh', (h + 10) + 'px');
+    const n = grid.querySelectorAll('.sp-cell').length; if (n) layout(n);
+  };
+  try { new ResizeObserver(fitDock).observe(dock); } catch (e) {}
+  window.addEventListener('resize', fitDock);
+
+  // ---------- broadcasters ----------
+  const openPop = o => { pop.classList.toggle('open', o); $('sp-edit').classList.toggle('on', o); if (o) input.focus(); };
+  $('sp-edit').onclick = () => openPop(!pop.classList.contains('open'));
+  $('sp-popclose').onclick = () => openPop(false);
+  $('sp-go').onclick = () => { build(parse(input.value)); openPop(false); };
+  $('sp-rebuild').onclick = () => build(parse(input.value));
+  input.addEventListener('keydown', e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); $('sp-go').click(); } if (e.key === 'Escape') openPop(false); });
+
+  // ---------- account (Windows app only) ----------
+  if (window.mgvApp && window.mgvApp.openAlerts && $('sp-alerts')) $('sp-alerts').onclick = () => window.mgvApp.openAlerts();
+  if (window.mgvApp && $('sp-acct')) { $('sp-acct').title = 'Sign in or out of Tango. The grid reloads when you close the window.'; $('sp-acct').onclick = () => window.mgvApp.openAccount(); }
+
+  // ---------- view ----------
+  H.classList.add('sp-anon');
+  const toggle = (id, cls, onText, offText, after) => {
+    const b = $(id);
+    const upd = () => { const on = H.classList.contains(cls); b.textContent = on ? onText : offText; b.classList.toggle('on', on); };
+    b.onclick = () => { H.classList.toggle(cls); upd(); after && after(); };
+    upd(); return upd;
+  };
+  toggle('sp-anon-btn', 'sp-anon', 'Names hidden', 'Names shown');
+  toggle('sp-allhide', 'sp-allhide', 'Show all', 'Hide all');
+  const fsb = $('sp-fs');
+  const fsUpd = () => { fsb.textContent = D.fullscreenElement ? 'Exit full screen' : 'Full screen'; fsb.classList.toggle('on', !!D.fullscreenElement); };
+  fsb.onclick = async () => { try { if (D.fullscreenElement) await D.exitFullscreen(); else await H.requestFullscreen({ navigationUI: 'hide' }); } catch (e) { fsb.textContent = 'Full screen not allowed'; setTimeout(fsUpd, 2500); } };
+  D.onfullscreenchange = () => { fsUpd(); setTimeout(() => { const n = grid.querySelectorAll('.sp-cell').length; if (n) layout(n); }, 200); };
+  fsUpd();
+  const small = store.get('sp_dock_small') === '1';
+  H.classList.toggle('sp-docksmall', small);
+  $('sp-dockmin').onclick = () => { H.classList.add('sp-docksmall'); store.set('sp_dock_small', '1'); openPop(false); setTimeout(() => layout(grid.querySelectorAll('.sp-cell').length || 1), 50); };
+  $('sp-dockopen').onclick = () => { H.classList.remove('sp-docksmall'); store.set('sp_dock_small', '0'); setTimeout(() => layout(grid.querySelectorAll('.sp-cell').length || 1), 50); };
+
+  // ---------- picture ----------
+  const OPT = {
+    sharp: { label: 'Sharpen', order: ['Off', 'Low', 'Medium', 'High'], val: { Off: 0, Low: 0.35, Medium: 0.7, High: 1.1 }, def: 'Medium' },
+    sat: { label: 'Saturation', order: ['Natural', 'Low', 'Medium', 'High'], val: { Natural: 1.0, Low: 1.12, Medium: 1.3, High: 1.5 }, def: 'Low' },
+    tone: { label: 'Color', order: ['Neutral', 'Warm', 'Warmer', 'Cool'], val: { Neutral: [1, 1, 1], Warm: [1.06, 1.0, 0.93], Warmer: [1.12, 1.01, 0.86], Cool: [0.94, 1.0, 1.07] }, def: 'Neutral' }
+  };
+  const cur = {};
+  for (const k in OPT) { cur[k] = OPT[k].def; const s = store.get('sp_fx_' + k); if (s && s in OPT[k].val) cur[k] = s; }
+  const kernel = a => `0 ${-a} 0 ${-a} ${1 + 4 * a} ${-a} 0 ${-a} 0`;
+  function apply(f) {
+    try {
+      const d = f.contentDocument; if (!d || !window.__spFindVid(d)) return;
+      let svg = d.getElementById('sp-fx-svg');
+      if (!svg) {
+        svg = d.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        svg.id = 'sp-fx-svg'; svg.setAttribute('width', '0'); svg.setAttribute('height', '0');
+        svg.style.cssText = 'position:absolute;width:0;height:0;visibility:hidden';
+        svg.innerHTML = '<filter id="sp-fx" color-interpolation-filters="sRGB"><feColorMatrix type="matrix" values="1 0 0 0 0 0 1 0 0 0 0 0 1 0 0 0 0 0 1 0"/><feConvolveMatrix order="3" preserveAlpha="true" kernelMatrix="0 0 0 0 1 0 0 0 0"/></filter>';
+        d.body.appendChild(svg);
+      }
+      const [r, g, b] = OPT.tone.val[cur.tone], a = OPT.sharp.val[cur.sharp];
+      svg.querySelector('feColorMatrix').setAttribute('values', `${r} 0 0 0 0 0 ${g} 0 0 0 0 0 ${b} 0 0 0 0 0 1 0`);
+      svg.querySelector('feConvolveMatrix').setAttribute('kernelMatrix', kernel(a));
+      const useSvg = a > 0 || cur.tone !== 'Neutral';
+      let st = d.getElementById('sp-fx-style');
+      if (!st) { st = d.createElement('style'); st.id = 'sp-fx-style'; d.head.appendChild(st); }
+      st.textContent = `html body [data-sp-v]{filter:${useSvg ? 'url(#sp-fx) ' : ''}contrast(1.08) saturate(${OPT.sat.val[cur.sat]}) brightness(1.03) !important;}`;
+    } catch (e) {}
+  }
+  const allFx = () => D.querySelectorAll('.sp-cell iframe').forEach(apply);
+  for (const k in OPT) {
+    const btn = $('sp-fx-' + k);
+    const upd = () => { btn.textContent = OPT[k].label + ' · ' + cur[k]; btn.title = 'Click to change (' + OPT[k].order.join(' / ') + ')'; };
+    btn.onclick = () => { const o = OPT[k].order; cur[k] = o[(o.indexOf(cur[k]) + 1) % o.length]; store.set('sp_fx_' + k, cur[k]); upd(); allFx(); };
+    upd();
+  }
+  window.__spFxT = setInterval(allFx, 2000);
+
+  // ---------- chat ----------
+  const readChat = f => {
+    try {
+      const d = f.contentDocument;
+      return [...d.querySelectorAll('[data-testid^="chat-event-"]')].map(e => {
+        const parts = []; const w = d.createTreeWalker(e, NodeFilter.SHOW_TEXT); let n;
+        while ((n = w.nextNode())) { const t = n.textContent.trim(); if (t) parts.push(t); }
+        return parts;
+      }).filter(p => p.length).slice(-10);
+    } catch (e) { return []; }
+  };
+  function renderChat() {
+    if (!H.classList.contains('sp-chaton')) return;
+    D.querySelectorAll('.sp-cell').forEach(c => {
+      const body = c.querySelector('.sp-body'); if (!body) return;
+      let box = body.querySelector('.sp-chat');
+      if (!box) { box = D.createElement('div'); box.className = 'sp-chat'; body.appendChild(box); }
+      const lines = c.classList.contains('live') ? readChat(c.querySelector('iframe')) : [];
+      const key = JSON.stringify(lines); if (box.dataset.k === key) return; box.dataset.k = key;
+      box.textContent = '';
+      for (const p of lines) {
+        const ln = D.createElement('div'); ln.className = 'ln';
+        const sys = p.length === 1 || /^(Battle Results:|New Follower)/.test(p[0]) || /New Follower!?$/.test(p[p.length - 1]);
+        if (p.length > 1) { const b = D.createElement('b'); b.textContent = p[0]; ln.appendChild(b); ln.appendChild(D.createTextNode(p.slice(1).join(' '))); }
+        else ln.appendChild(D.createTextNode(p[0]));
+        if (sys) ln.classList.add('sys');
+        box.appendChild(ln);
+      }
+    });
+  }
+  if (store.get('sp_chat') !== 'off') H.classList.add('sp-chaton');
+  toggle('sp-chat-btn', 'sp-chaton', 'Chat on', 'Chat off', () => { store.set('sp_chat', H.classList.contains('sp-chaton') ? 'on' : 'off'); renderChat(); });
+  window.__spChatT = setInterval(renderChat, 2000);
+
+  // ---------- sound ----------
+  const tangoMute = f => { try { return f.contentDocument.querySelector('[data-testid=mute]'); } catch (e) { return null; } };
+  const isMuted = m => { const p = m && m.querySelector('path'); return !!p && /^M5\.47 3\.841/.test(p.getAttribute('d') || ''); };
+  function syncSound() {
+    D.querySelectorAll('.sp-cell').forEach(c => {
+      const b = c.querySelector('.sp-snd'); if (!b) return;
+      if (!b.dataset.wired) { b.dataset.wired = '1'; b.onclick = () => { const m = tangoMute(c.querySelector('iframe')); if (m) { m.click(); setTimeout(syncSound, 400); } }; }
+      const m = c.classList.contains('live') ? tangoMute(c.querySelector('iframe')) : null;
+      const muted = !m || isMuted(m);
+      b.disabled = !m;
+      const want = muted ? 'm' : 's';
+      if (b.dataset.st !== want) { b.dataset.st = want; b.innerHTML = muted ? ICON.mute : ICON.sound; }
+      b.classList.toggle('on', !!m && !muted);
+      b.title = !m ? 'Sound (available when live)' : muted ? 'Turn sound on' : 'Turn sound off';
+    });
+  }
+  window.__spSndT = setInterval(syncSound, 1500);
+
+  // ---------- viewers ----------
+  const num = t => { t = (t || '').trim().replace(/,/g, ''); const m = t.match(/^([\d.]+)\s*([KkMm]?)/); if (!m) return null; let v = parseFloat(m[1]); if (/k/i.test(m[2])) v *= 1e3; if (/m/i.test(m[2])) v *= 1e6; return Math.round(v); };
+  const fmt = n => n >= 1e6 ? (n / 1e6).toFixed(1) + 'M' : n >= 1e4 ? (n / 1e3).toFixed(1) + 'K' : n.toLocaleString();
+  function stats() {
+    let tot = 0, live = 0, all = 0;
+    D.querySelectorAll('.sp-cell').forEach(c => {
+      all++;
+      let v = null;
+      try { if (c.classList.contains('live')) { const e = c.querySelector('iframe').contentDocument.querySelector('[data-testid=viewers]'); v = e ? num(e.textContent) : null; } } catch (e) {}
+      if (c.classList.contains('live')) live++;
+      if (v != null) tot += v;
+      const vc = c.querySelector('.sp-vc'); if (vc) vc.textContent = v != null ? fmt(v) + ' watching' : '';
+    });
+    $('sp-stats').innerHTML = `<b>${fmt(tot)}</b> viewers · ${live} of ${all} live`;
+  }
+  window.__spStatsT = setInterval(stats, 3000);
+
+  // ---------- start ----------
+  let saved = [];
+  try { saved = JSON.parse(store.get(KEY) || '[]'); } catch (e) {}
+  input.value = saved.join(', ');
+  build(saved);
+  stats(); syncSound();
+  if (!saved.length) openPop(true);
+})();

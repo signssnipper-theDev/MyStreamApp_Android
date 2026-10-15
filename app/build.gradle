@@ -1,0 +1,43 @@
+plugins {
+    id 'com.android.application'
+}
+
+// Version: 1.0.<GitHub build number>, so every build installs over the last one.
+def runNumber = (System.getenv('GITHUB_RUN_NUMBER') ?: '1').toInteger()
+def keystoreFile = System.getenv('KEYSTORE_FILE')
+
+android {
+    namespace 'com.signssnipper.mystream'
+    compileSdk 35
+
+    defaultConfig {
+        applicationId 'com.signssnipper.mystream'
+        minSdk 26
+        targetSdk 35
+        versionCode runNumber
+        versionName "1.0.${runNumber}"
+    }
+
+    signingConfigs {
+        if (keystoreFile) {
+            release {
+                storeFile file(keystoreFile)
+                storePassword System.getenv('KEYSTORE_PASSWORD')
+                keyAlias 'mystream'
+                keyPassword System.getenv('KEYSTORE_PASSWORD')
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            if (keystoreFile) signingConfig signingConfigs.release
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
