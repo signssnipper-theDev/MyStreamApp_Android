@@ -69,6 +69,12 @@ html.sp-anon .sp-name .nm{display:none;} html.sp-anon .sp-name .an{display:inlin
 #sp-root .sp-ic[disabled]{opacity:.4;cursor:default;}
 .sp-body{position:relative;flex:1;min-height:0;margin:0 6px 6px;border-radius:10px;overflow:hidden;background:#000;}
 .sp-body iframe{position:absolute;inset:0;width:100%;height:100%;border:0;background:#000;}
+.sp-zoomer{position:absolute;inset:0;z-index:2;touch-action:none;cursor:zoom-in;display:none;}
+.sp-cell.live .sp-zoomer{display:block;}
+.sp-cell.zoomed .sp-zoomer{cursor:grab;} .sp-cell.zoomed .sp-zoomer.drag{cursor:grabbing;}
+.sp-chat{z-index:3;}
+#sp-root .sp-zm{width:auto;min-width:30px;padding:0 7px;font-size:12px;font-variant-numeric:tabular-nums;display:none;}
+#sp-root .sp-cell.zoomed .sp-zm{display:grid;}
 .sp-cell:not(.live) iframe{opacity:.35;}
 .sp-cell.hidden iframe{opacity:0 !important;pointer-events:none;}
 html.sp-allhide #sp-grid{opacity:0 !important;pointer-events:none !important;}
@@ -149,6 +155,81 @@ html.sp-anon .sp-chat .ln b{display:none;}
         [data-sp-v]{visibility:visible !important;position:fixed !important;top:50% !important;left:50% !important;transform:translate(-50%,-50%) !important;width:${w}px !important;height:${h}px !important;max-width:100vw !important;max-height:100vh !important;object-fit:contain !important;filter:contrast(1.08) saturate(1.12) brightness(1.03) !important;}`;
     } catch (e) {}
   }
+  // ---------- per-cell zoom ----------
+  // Wheel or pinch to zoom, drag to pan, double-click / double-tap or the badge to reset.
+  // Saved per broadcaster. Applied inside the cell's Tango frame to the video only.
+  const ZKEY = 'sp_zoom', ZMIN = 1, ZMAX = 5;
+  let zooms = {}; try { zooms = JSON.parse(store.get(ZKEY) || '{}') || {}; } catch (e) { zooms = {}; }
+  const zget = u => { const z = zooms[u]; return z && z.z > 1 ? z : { z: 1, x: 0, y: 0 }; };
+  let zsaveT = 0;
+  const zsave = () => { clearTimeout(zsaveT); zsaveT = setTimeout(() => store.set(ZKEY, JSON.stringify(zooms)), 400); };
+  function applyZoom(f, el, u) {
+    const z = zget(u);
+    el.classList.toggle('zoomed', z.z > 1.001);
+    const b = el.querySelector('.sp-zm'); if (b) { b.textContent = z.z.toFixed(1) + '×'; b.title = 'Zoom ' + z.z.toFixed(1) + '×. Click to reset'; }
+    try {
+      const d = f.contentDocument; if (!d || !d.head) return;
+      let st = d.getElementById('sp-zoom-style');
+      if (!st) { st = d.createElement('style'); st.id = 'sp-zoom-style'; d.head.appendChild(st); }
+      st.textContent = z.z > 1.001
+        ? `html body [data-sp-v]{transform:translate(calc(-50% + ${z.x.toFixed(1)}px),calc(-50% + ${z.y.toFixed(1)}px)) scale(${z.z.toFixed(3)}) !important;transform-origin:center center !important;}`
+        : '';
+    } catch (e) {}
+  }
+  function zoomBox(f) {
+    // The on-screen size of the video inside the cell, before zoom.
+    try { const v = f.contentDocument.querySelector('[data-sp-v]'); if (v) { const w = v.offsetWidth, h = v.offsetHeight; if (w && h) return { w, h }; } } catch (e) {}
+    return { w: f.clientWidth, h: f.clientHeight };
+  }
+  function zset(f, el, u, z, x, y) {
+    z = Math.min(ZMAX, Math.max(ZMIN, z));
+    const bx = zoomBox(f), mx = (z - 1) * bx.w / 2, my = (z - 1) * bx.h / 2;
+    x = Math.max(-mx, Math.min(mx, x)); y = Math.max(-my, Math.min(my, y));
+    if (z <= 1.001) delete zooms[u]; else zooms[u] = { z, x, y };
+    zsave(); applyZoom(f, el, u);
+  }
+  // Zoom by factor k around point (cx, cy) given relative to the cell's centre.
+  function zby(f, el, u, k, cx, cy) {
+    const z0 = zget(u), z1 = Math.min(ZMAX, Math.max(ZMIN, z0.z * k)), r = z1 / z0.z;
+    zset(f, el, u, z1, cx - (cx - z0.x) * r, cy - (cy - z0.y) * r);
+  }
+  function wireZoom(f, el, u) {
+    const pad = el.querySelector('.sp-zoomer');
+    const rel = (e) => { const r = pad.getBoundingClientRect(); return [e.clientX - r.left - r.width / 2, e.clientY - r.top - r.height / 2]; };
+    pad.addEventListener('wheel', e => { e.preventDefault(); const [cx, cy] = rel(e); zby(f, el, u, Math.exp(-e.deltaY * 0.0015), cx, cy); }, { passive: false });
+    const pts = new Map(); let pinch0 = null, lastTap = 0, moved = false;
+    pad.addEventListener('pointerdown', e => {
+      try { pad.setPointerCapture(e.pointerId); } catch (err) {}
+      pts.set(e.pointerId, [e.clientX, e.clientY]); moved = false;
+      if (pts.size === 2) { const [a, b] = [...pts.values()]; pinch0 = { d: Math.hypot(a[0] - b[0], a[1] - b[1]), z: zget(u).z }; }
+      pad.classList.add('drag');
+    });
+    pad.addEventListener('pointermove', e => {
+      if (!pts.has(e.pointerId)) return;
+      const prev = pts.get(e.pointerId); pts.set(e.pointerId, [e.clientX, e.clientY]);
+      if (pts.size >= 2 && pinch0) {
+        const [a, b] = [...pts.values()]; const d = Math.hypot(a[0] - b[0], a[1] - b[1]);
+        const r = pad.getBoundingClientRect(); const cx = (a[0] + b[0]) / 2 - r.left - r.width / 2, cy = (a[1] + b[1]) / 2 - r.top - r.height / 2;
+        if (pinch0.d > 0) zby(f, el, u, (pinch0.z * d / pinch0.d) / zget(u).z, cx, cy);
+        moved = true;
+      } else if (pts.size === 1) {
+        const dx = e.clientX - prev[0], dy = e.clientY - prev[1];
+        if (Math.abs(dx) + Math.abs(dy) > 0) { const z = zget(u); if (z.z > 1.001) zset(f, el, u, z.z, z.x + dx, z.y + dy); if (Math.abs(dx) + Math.abs(dy) > 2) moved = true; }
+      }
+    });
+    const up = e => {
+      pts.delete(e.pointerId); if (pts.size < 2) pinch0 = null;
+      if (!pts.size) pad.classList.remove('drag');
+      if (e.type === 'pointerup' && !moved) {
+        const now = Date.now();
+        if (now - lastTap < 320) { zset(f, el, u, 1, 0, 0); lastTap = 0; } else lastTap = now;
+      }
+    };
+    pad.addEventListener('pointerup', up); pad.addEventListener('pointercancel', up);
+    pad.addEventListener('dblclick', e => { e.preventDefault(); zset(f, el, u, 1, 0, 0); lastTap = 0; });
+    el.querySelector('.sp-zm').onclick = () => zset(f, el, u, 1, 0, 0);
+  }
+
   // Tango's own live lookup (sent with your Tango sign-in if you're signed in).
   // Returns {live:true,id} / {live:false} / null when it can't tell.
   const lastLookup = {};
@@ -198,14 +279,16 @@ html.sp-anon .sp-chat .ln b{display:none;}
     const el = D.createElement('div');
     el.className = 'sp-cell';
     el.innerHTML = `<div class="sp-head"><span class="sp-dot"></span><span class="sp-name"><span class="nm"></span><span class="an"></span> <span class="sp-st">· checking…</span></span><span class="sp-vc"></span>
+      <button class="sp-ic sp-zm" title="Reset zoom" aria-label="Reset zoom">1.0×</button>
       <button class="sp-ic sp-snd" title="Sound on/off" aria-label="Sound on/off">${ICON.mute}</button>
       <button class="sp-ic sp-hide" title="Hide this stream" aria-label="Hide this stream">${ICON.eyeOff}</button>
       <button class="sp-ic sp-x" title="Remove" aria-label="Remove">${ICON.x}</button></div>
-      <div class="sp-body"><iframe allow="autoplay; fullscreen"></iframe></div>`;
+      <div class="sp-body"><iframe allow="autoplay; fullscreen"></iframe><div class="sp-zoomer" title="Scroll or pinch to zoom, drag to move, double-click to reset"></div></div>`;
     const f = el.querySelector('iframe'), nm = el.querySelector('.nm'), st = el.querySelector('.sp-st'), hide = el.querySelector('.sp-hide');
     nm.textContent = '@' + user;
     el.querySelector('.an').textContent = 'Cell ' + (idx + 1);
     openUser(f, user);
+    wireZoom(f, el, user); applyZoom(f, el, user);
     hide.onclick = () => { const h = el.classList.toggle('hidden'); hide.innerHTML = h ? ICON.eye : ICON.eyeOff; hide.title = h ? 'Show this stream' : 'Hide this stream'; hide.classList.toggle('on', h); };
     el.querySelector('.sp-x').onclick = () => { const list = parse(input.value); list.splice(idx, 1); input.value = list.join(', '); build(list); };
     const url = () => { try { return f.contentWindow.location.href; } catch (e) { return ''; } };
@@ -213,7 +296,7 @@ html.sp-anon .sp-chat .ln b{display:none;}
     const check = () => {
       const live = url().includes('/stream/') || (() => { try { return / Live Stream - Watch/.test(f.contentDocument.title || ''); } catch (e) { return false; } })();
       el.classList.toggle('live', live);
-      if (live) styleInner(f);
+      if (live) { styleInner(f); applyZoom(f, el, user); }
       const dn = disp();
       nm.textContent = '@' + user + (dn ? ' (' + dn + ')' : '');
       st.textContent = live ? '· LIVE' : '· not live';
