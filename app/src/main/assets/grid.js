@@ -55,7 +55,7 @@ body > *:not(#sp-root){display:none !important;}
 #sp-brand i{width:11px;height:11px;border-radius:3px;background:var(--accent);display:block;}
 #sp-stats{margin-left:auto;background:var(--panel);border:1px solid var(--line);border-radius:999px;padding:6px 14px;font-variant-numeric:tabular-nums;color:var(--muted);}
 #sp-stats b{color:var(--ink);font-family:Sora,system-ui,sans-serif;}
-#sp-grid{position:absolute;top:52px;left:10px;right:10px;bottom:var(--gridb,92px);display:grid;gap:10px;min-height:0;}
+#sp-grid{position:absolute;top:52px;left:10px;right:10px;bottom:var(--gridb,92px);display:grid;gap:10px;min-height:0;justify-content:center;align-content:center;}
 .sp-cell{position:relative;display:flex;flex-direction:column;background:var(--panel);border:1px solid var(--line);border-radius:14px;overflow:hidden;min-height:0;min-width:0;}
 .sp-head{display:flex;align-items:center;gap:6px;padding:6px 8px 6px 10px;}
 .sp-dot{width:8px;height:8px;border-radius:50%;background:var(--off);flex:none;}
@@ -104,6 +104,8 @@ html:not(.sp-chaton) .sp-chat{display:none;}
 html.sp-anon .sp-chat .ln b{display:none;}
 .sp-cell{container-type:inline-size;}
 @container (max-width:230px){.sp-st,.sp-vc{display:none;}.sp-head{gap:3px;padding:5px 5px 5px 8px;}#sp-root .sp-ic{width:24px;height:24px;border-radius:6px;}}
+#sp-grid.focus .sp-cell:not(.focused){display:none;}
+#sp-root .sp-cell.focused .sp-max{background:var(--tint);border-color:var(--accent);color:#cfe0ff;}
 .sp-empty{position:absolute;inset:0;display:grid;place-items:center;color:var(--muted);text-align:center;font-size:14px;}`;
   D.head.appendChild(css);
 
@@ -111,6 +113,8 @@ html.sp-anon .sp-chat .ln b{display:none;}
     mute: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M11 5 6 9H3v6h3l5 4z"/><path d="m22 9-6 6M16 9l6 6"/></svg>',
     sound: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M11 5 6 9H3v6h3l5 4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13"/></svg>',
     eye: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M2.5 12S6 6 12 6s9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6z"/><circle cx="12" cy="12" r="2.5"/></svg>',
+    max: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>',
+    unmax: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5"/></svg>',
     eyeOff: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 3l18 18"/><path d="M10.6 6.1A10 10 0 0 1 12 6c6 0 9.5 6 9.5 6a17 17 0 0 1-3 3.6M6.3 7.6A17 17 0 0 0 2.5 12S6 18 12 18a9 9 0 0 0 4-.9"/></svg>',
     x: '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>'
   };
@@ -288,6 +292,7 @@ html.sp-anon .sp-chat .ln b{display:none;}
     el.className = 'sp-cell';
     el.innerHTML = `<div class="sp-head"><span class="sp-dot"></span><span class="sp-name"><span class="nm"></span><span class="an"></span> <span class="sp-st">· checking…</span></span><span class="sp-vc"></span>
       <button class="sp-ic sp-zm" title="Reset zoom" aria-label="Reset zoom">1.0×</button>
+      <button class="sp-ic sp-max" title="Show this stream large" aria-label="Show this stream large">${ICON.max}</button>
       <button class="sp-ic sp-snd" title="Sound on/off" aria-label="Sound on/off">${ICON.mute}</button>
       <button class="sp-ic sp-hide" title="Hide this stream" aria-label="Hide this stream">${ICON.eyeOff}</button>
       <button class="sp-ic sp-x" title="Remove" aria-label="Remove">${ICON.x}</button></div>
@@ -297,6 +302,7 @@ html.sp-anon .sp-chat .ln b{display:none;}
     el.querySelector('.an').textContent = 'Cell ' + (idx + 1);
     openUser(f, user);
     wireZoom(f, el, user); applyZoom(f, el, user);
+    el.querySelector('.sp-max').onclick = () => setFocus(el);
     hide.onclick = () => { const h = el.classList.toggle('hidden'); hide.innerHTML = h ? ICON.eye : ICON.eyeOff; hide.title = h ? 'Show this stream' : 'Hide this stream'; hide.classList.toggle('on', h); };
     el.querySelector('.sp-x').onclick = () => { const list = parse(input.value); list.splice(idx, 1); input.value = list.join(', '); build(list); };
     const url = () => { try { return f.contentWindow.location.href; } catch (e) { return ''; } };
@@ -325,27 +331,47 @@ html.sp-anon .sp-chat .ln b{display:none;}
     }, 60000));
     return el;
   }
+  // Size every cell to the stream's own shape (9:16) so there is no empty space
+  // around the video, and centre the grid. In focus mode one cell fills the area.
   function layout(n) {
+    if (grid.classList.contains('focus')) n = 1;
+    if (!n) return;
     const W = grid.clientWidth || innerWidth - 20, Hh = grid.clientHeight || innerHeight - 150;
-    let best = 1, bestScore = 0;
+    const head = (grid.querySelector('.sp-cell:not([style*="display: none"]) .sp-head') || {}).offsetHeight || 40;
+    const gap = 10, padX = 14, padY = head + 8;   // borders + side margins / header + bottom margin
+    let best = 1, bestW = 0;
     for (let cols = 1; cols <= n; cols++) {
-      const rows = Math.ceil(n / cols), cw = W / cols, ch = Hh / rows - 46;
+      const rows = Math.ceil(n / cols);
+      const cw = (W - gap * (cols - 1)) / cols - padX, ch = (Hh - gap * (rows - 1)) / rows - padY;
       const vw = Math.min(cw, ch * 9 / 16);
-      if (vw > bestScore) { bestScore = vw; best = cols; }
+      if (vw > bestW) { bestW = vw; best = cols; }
     }
-    grid.style.gridTemplateColumns = `repeat(${best}, minmax(0, 1fr))`;
-    grid.style.gridTemplateRows = `repeat(${Math.ceil(n / best)}, minmax(0, 1fr))`;
+    const rows = Math.ceil(n / best), vw = Math.max(60, Math.floor(bestW));
+    grid.style.gridTemplateColumns = `repeat(${best}, ${vw + padX}px)`;
+    grid.style.gridTemplateRows = `repeat(${rows}, ${Math.floor(vw * 16 / 9) + padY}px)`;
     setTimeout(() => D.querySelectorAll('.sp-cell.live iframe').forEach(styleInner), 60);
+  }
+  function setFocus(el) {
+    const on = el && !el.classList.contains('focused');
+    grid.querySelectorAll('.sp-cell').forEach(c => {
+      c.classList.toggle('focused', on && c === el);
+      const b = c.querySelector('.sp-max'); if (b) { const f = on && c === el; b.innerHTML = f ? ICON.unmax : ICON.max; b.title = f ? 'Back to the grid' : 'Show this stream large'; b.setAttribute('aria-label', b.title); }
+    });
+    grid.classList.toggle('focus', !!on);
+    layout(grid.querySelectorAll('.sp-cell').length);
   }
   function build(list) {
     (window.__spTimers || []).forEach(clearInterval); window.__spTimers = [];
     store.set(KEY, JSON.stringify(list));
     grid.innerHTML = '';
     if (!list.length) { grid.innerHTML = '<div class="sp-empty">No broadcasters yet.<br>Click Edit list to add some.</div>'; grid.style.gridTemplateColumns = '1fr'; return; }
+    grid.classList.remove('focus');
     layout(list.length);
     list.forEach((u, i) => grid.appendChild(cell(u, i)));
+    requestAnimationFrame(() => layout(list.length));
   }
   window.addEventListener('resize', () => { const n = grid.querySelectorAll('.sp-cell').length; if (n) layout(n); });
+  D.addEventListener('keydown', e => { if (e.key === 'Escape' && grid.classList.contains('focus') && !D.fullscreenElement) setFocus(null); });
   const dock = $('sp-dock');
   const fitDock = () => {
     const h = dock.offsetHeight + 14;
