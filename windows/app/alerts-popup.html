@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; script-src 'self' 'unsafe-inline'">
+<title>Live now</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sora:wght@700&family=Figtree:wght@500;600&display=swap">
+<style>
+  html,body{margin:0;height:100%;background:#131a26;color:#e3e8f2;font:13px/1.35 Figtree,'Segoe UI',system-ui,sans-serif;overflow:hidden;user-select:none}
+  .card{box-sizing:border-box;height:100%;border:1px solid #2a3549;border-radius:0;display:flex;align-items:center;gap:12px;padding:12px 14px}
+  .dot{width:12px;height:12px;border-radius:50%;background:#ff4d6a;box-shadow:0 0 0 4px rgba(255,77,106,.22);flex:none;animation:p 1.6s ease-in-out infinite}
+  @keyframes p{50%{box-shadow:0 0 0 7px rgba(255,77,106,.08)}}
+  @media (prefers-reduced-motion:reduce){.dot{animation:none}}
+  .txt{flex:1;min-width:0}
+  .k{font:700 10px Sora,'Segoe UI',sans-serif;letter-spacing:.16em;color:#7aa2ff}
+  .n{font-weight:600;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .row{display:flex;gap:6px;margin-top:6px}
+  button{font:600 12px Figtree,'Segoe UI',sans-serif;color:#e3e8f2;background:#172031;border:1px solid #2a3549;border-radius:8px;padding:5px 10px;cursor:pointer}
+  button:hover{border-color:#7aa2ff}
+  button.primary{background:#4f7dff;border-color:#4f7dff;color:#fff}
+  .x{position:absolute;top:6px;right:8px;background:none;border:0;color:#8d98ad;font-size:16px;padding:2px 6px}
+</style>
+</head>
+<body>
+<div class="card">
+  <span class="dot" aria-hidden="true"></span>
+  <div class="txt">
+    <div class="k">LIVE NOW</div>
+    <div class="n" id="name"></div>
+    <div class="row"><button class="primary" id="open">Open MultiGridView</button><button id="later">Dismiss</button></div>
+  </div>
+  <button class="x" id="x" aria-label="Close">×</button>
+</div>
+<script>
+  const q = new URLSearchParams(location.search);
+  document.getElementById('name').textContent = (q.get('name') || 'A broadcaster') + ' just went live';
+  document.getElementById('open').onclick = () => window.mgv.popupOpen();
+  document.getElementById('later').onclick = () => window.mgv.popupClose();
+  document.getElementById('x').onclick = () => window.mgv.popupClose();
+  let hover = false;
+  document.body.onmouseenter = () => hover = true;
+  document.body.onmouseleave = () => hover = false;
+  let left = 15;
+  setInterval(() => { if (!hover && --left <= 0) window.mgv.popupClose(); }, 1000);
+</script>
+</body>
+</html>

@@ -1,0 +1,88 @@
+name: Build Windows installer
+
+on:
+  push:
+    branches: [main]
+    paths: ['windows/**', '.github/workflows/build-windows.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: pwsh
+        working-directory: windows
+    env:
+      ELECTRON_VERSION: '44.7.0'
+      ELECTRON_SHA256: 'EEE30DC8FA1F5EA95490E59F44E46EA68DD24C6E93D22FACF70FE5C2D4C2665C'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Read version
+        id: ver
+        run: |
+          $v = (Get-Content VERSION -Raw).Trim()
+          "version=$v" | Out-File -Append $env:GITHUB_OUTPUT
+          Write-Host "Version $v"
+
+      - name: Download the browser engine (Electron) and check it
+        run: |
+          $ProgressPreference = 'SilentlyContinue'
+          $zip = "electron.zip"
+          Invoke-WebRequest "https://github.com/electron/electron/releases/download/v$env:ELECTRON_VERSION/electron-v$env:ELECTRON_VERSION-win32-x64.zip" -OutFile $zip
+          $hash = (Get-FileHash $zip -Algorithm SHA256).Hash
+          if ($hash -ne $env:ELECTRON_SHA256) { throw "Electron download checksum mismatch: $hash" }
+
+      - name: Assemble the app folder
+        run: |
+          $out = "build\MultiGridView"
+          New-Item -ItemType Directory -Force $out | Out-Null
+          Expand-Archive electron.zip -DestinationPath $out -Force
+          Rename-Item "$out\electron.exe" "MultiGridView.exe"
+          Remove-Item "$out\resources\default_app.asar" -ErrorAction SilentlyContinue
+          New-Item -ItemType Directory -Force "$out\resources\app" | Out-Null
+          Copy-Item "app\*" "$out\resources\app" -Recurse -Force
+          Set-Content "$out\runtime.txt" $env:ELECTRON_VERSION
+          # Keep the app's version in step with windows/VERSION.
+          $pj = Get-Content "$out\resources\app\package.json" -Raw | ConvertFrom-Json
+          $pj.version = "${{ steps.ver.outputs.version }}"
+          $pj | ConvertTo-Json | Set-Content "$out\resources\app\package.json"
+
+      - name: Make sure NSIS is available
+        run: |
+          $mk = Get-Command makensis -ErrorAction SilentlyContinue
+          if (-not $mk) {
+            foreach ($p in @("${env:ProgramFiles(x86)}\NSIS\makensis.exe", "$env:ProgramFiles\NSIS\makensis.exe")) { if (Test-Path $p) { $mk = $p } }
+          }
+          if (-not $mk) { choco install nsis -y --no-progress | Out-Null; $mk = "${env:ProgramFiles(x86)}\NSIS\makensis.exe" }
+          if ($mk -is [System.Management.Automation.CommandInfo]) { $mk = $mk.Source }
+          "MAKENSIS=$mk" | Out-File -Append $env:GITHUB_ENV
+          Write-Host "Using $mk"
+
+      - name: Build the installer
+        run: |
+          & $env:MAKENSIS /V2 "/DVERSION=${{ steps.ver.outputs.version }}" installer.nsi
+          if ($LASTEXITCODE -ne 0) { throw "makensis failed" }
+          Get-ChildItem MultiGridView-Setup-*.exe | Format-Table Name, Length
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: MultiGridView-Setup-${{ steps.ver.outputs.version }}
+          path: windows/MultiGridView-Setup-*.exe
+
+      - name: Publish as a release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: win-v${{ steps.ver.outputs.version }}
+          name: MultiGridView for Windows ${{ steps.ver.outputs.version }}
+          files: windows/MultiGridView-Setup-*.exe
+          make_latest: false
+          body: |
+            Download **MultiGridView-Setup-${{ steps.ver.outputs.version }}.exe** and double-click it.
+            Windows may say "Windows protected your PC" because the installer isn't code-signed: click **More info**, then **Run anyway**.
+            It installs for your Windows account only (no admin rights), updates an existing install in place, and keeps your lists, settings and sign-in.
+            To remove it: Settings > Apps > Installed apps > MultiGridView > Uninstall.

@@ -16,3 +16,11 @@ Builds are signed with the key stored in the repository secrets `KEYSTORE_B64` a
 Without those secrets a test (debug) build is published instead.
 
 The grid is view-only. The app never records streams. Your Tango password is typed into Tango's own site, never into the app.
+
+## Windows app (`windows/`)
+MultiGridView for Windows: the same grid plus **MultiGridView Alerts**, built into a normal installer.
+
+- Download `MultiGridView-Setup-<version>.exe` from the newest **win-v…** release and double-click it.
+- Windows may show "Windows protected your PC" (the installer isn't code-signed): **More info** > **Run anyway**.
+- Installs for your account only, updates in place, keeps your settings. Uninstall from Settings > Apps.
+- To publish a new version: change the files in `windows/app/`, bump `windows/VERSION`, push.
