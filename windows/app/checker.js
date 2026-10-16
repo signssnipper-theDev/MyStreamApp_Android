@@ -41,7 +41,7 @@ window.__mgvCheckFrame = (user) => new Promise(resolve => {
     }
     const p = (win() && win().location.pathname) || '';
     if (p === '/' && navTries < 2 && Date.now() - navAt > 4000) return nav();   // bounced home: try once more
-    if (Date.now() - navAt > 25000) finish(false);
+    if (Date.now() - navAt > 15000) finish(false);
   }, 500));
   timers.push(setTimeout(() => finish(navAt ? false : null), 40000));
   f.src = location.origin + '/';

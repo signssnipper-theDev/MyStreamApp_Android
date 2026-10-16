@@ -9,13 +9,10 @@ import java.net.URLEncoder;
 /**
  * Tango's own live lookup by username (the same request Tango's profile page makes):
  * 200 with data = live, 404 = not live. Only the answer is used, never the stream.
- * Uses the visitor session the grid's web view keeps (no sign-in).
+ * Sends your Tango sign-in (if any) so it sees what your account can see.
  */
 final class Lookup {
     private Lookup() {}
-
-    /** Last HTTP status from the lookup (401 = the site refused the session). */
-    static volatile int lastStatus = 0;
 
     static final String UA = "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Mobile Safari/537.36";
 
@@ -36,7 +33,6 @@ final class Lookup {
                 if (cookies != null && !cookies.isEmpty()) c.setRequestProperty("Cookie", cookies);
             } catch (Exception ignored) {}
             int code = c.getResponseCode();
-            lastStatus = code;
             if (code == 404) return Boolean.FALSE;
             if (code == 200) {
                 try (InputStream in = c.getInputStream()) {
