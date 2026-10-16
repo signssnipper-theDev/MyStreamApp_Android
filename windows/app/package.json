@@ -1,7 +1,7 @@
 {
   "name": "multigridview",
   "productName": "MultiGridView",
-  "version": "1.9.3",
+  "version": "1.9.4",
   "description": "SystemProfiles Tango Live multi-stream grid",
   "main": "main.js"
 }

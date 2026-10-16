@@ -75,8 +75,10 @@ html.sp-anon .sp-name .nm{display:none;} html.sp-anon .sp-name .an{display:inlin
 .sp-chat{z-index:3;}
 #sp-root .sp-zm{width:auto;min-width:30px;padding:0 7px;font-size:12px;font-variant-numeric:tabular-nums;display:none;}
 #sp-root .sp-cell.zoomed .sp-zm{display:grid;}
-.sp-cell:not(.vready) iframe{opacity:0 !important;pointer-events:none !important;}
-.sp-wait{position:absolute;inset:0;z-index:1;display:grid;place-items:center;align-content:center;gap:10px;color:var(--muted);font-size:13px;text-align:center;padding:12px;}
+/* The frame stays fully visible underneath (a hidden frame makes the site's player
+   drop to a slow mode it doesn't leave); the cover sits on top until it's ready. */
+.sp-cell:not(.vready) iframe{pointer-events:none !important;}
+.sp-wait{position:absolute;inset:0;z-index:1;background:#000;display:grid;place-items:center;align-content:center;gap:10px;color:var(--muted);font-size:13px;text-align:center;padding:12px;}
 .sp-cell.vready .sp-wait{display:none;}
 .sp-spin{width:22px;height:22px;border-radius:50%;border:2px solid var(--line2);border-top-color:var(--accent2);animation:sp-spin 1s linear infinite;}
 .sp-cell.off .sp-spin{display:none;}
