@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; script-src 'self' 'unsafe-inline'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; script-src 'self' 'unsafe-inline'; img-src data:">
 <title>Live now</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sora:wght@700&family=Figtree:wght@500;600&display=swap">
 <style>
@@ -11,6 +11,11 @@
   .dot{width:12px;height:12px;border-radius:50%;background:#ff4d6a;box-shadow:0 0 0 4px rgba(255,77,106,.22);flex:none;animation:p 1.6s ease-in-out infinite}
   @keyframes p{50%{box-shadow:0 0 0 7px rgba(255,77,106,.08)}}
   @media (prefers-reduced-motion:reduce){.dot{animation:none}}
+  .pic{position:relative;flex:none;width:12px;height:12px;display:grid;place-items:center}
+  .pic img{display:none;width:58px;height:72px;object-fit:cover;border-radius:8px;border:1px solid #2a3549}
+  .pic.has{width:58px;height:72px}
+  .pic.has img{display:block}
+  .pic.has .dot{position:absolute;top:-3px;right:-3px;width:10px;height:10px;border:2px solid #131a26}
   .txt{flex:1;min-width:0}
   .k{font:700 10px Sora,'Segoe UI',sans-serif;letter-spacing:.16em;color:#7aa2ff}
   .n{font-weight:600;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -23,11 +28,11 @@
 </head>
 <body>
 <div class="card">
-  <span class="dot" aria-hidden="true"></span>
+  <div class="pic" id="pic"><img id="thumb" alt=""><span class="dot" aria-hidden="true"></span></div>
   <div class="txt">
     <div class="k">LIVE NOW</div>
     <div class="n" id="name"></div>
-    <div class="row"><button class="primary" id="open">Open MultiGridView</button><button id="later">Dismiss</button></div>
+    <div class="row"><button class="primary" id="open">Open in MultiGridView</button><button id="later">Dismiss</button></div>
   </div>
   <button class="x" id="x" aria-label="Close">×</button>
 </div>
@@ -35,6 +40,12 @@
   const q = new URLSearchParams(location.search);
   document.getElementById('name').textContent = (q.get('name') || 'A broadcaster') + ' just went live';
   document.getElementById('open').onclick = () => window.mgv.popupOpen();
+  window.mgv.onThumb(url => {
+    if (!/^data:image\//.test(url || '')) return;
+    const img = document.getElementById('thumb');
+    img.onload = () => document.getElementById('pic').classList.add('has');
+    img.src = url;
+  });
   document.getElementById('later').onclick = () => window.mgv.popupClose();
   document.getElementById('x').onclick = () => window.mgv.popupClose();
   let hover = false;

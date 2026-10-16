@@ -1,6 +1,6 @@
 // MultiGridView Alerts: a tray app that checks your broadcasters and pops up
 // an alert when one goes live. Started with: MultiGridView.exe --alerts
-const { app, BrowserWindow, Tray, Menu, Notification, ipcMain, nativeImage, shell, screen, session } = require('electron');
+const { app, BrowserWindow, Tray, Menu, Notification, ipcMain, nativeImage, shell, screen, session, net } = require('electron');
 const fs = require('fs');
 const path = require('path');
 const { spawn } = require('child_process');
@@ -97,7 +97,27 @@ function start() {
     const prev = status[u] ? status[u].live : null;
     status[u] = { live, checked: Date.now() };
     if (live && prev !== true) alertLive(u);
+    if (!live) delete thumbs[u];
     push();
+  }
+
+  // ---------- preview pictures ----------
+  // The picture Tango shows for a live stream, fetched once when someone goes
+  // live and kept only in memory (as a small image) while they stay live.
+  const thumbs = {};            // user -> data: URL
+  async function getThumb(u) {
+    if (!ready || !checkerWin || checkerWin.isDestroyed()) return null;
+    try {
+      const url = await checkerWin.webContents.executeJavaScript(`window.__mgvThumb(${JSON.stringify(u)})`);
+      if (!url || !/^https:\/\/cget\.tango\.me\//.test(url)) return null;
+      const r = await net.fetch(url);
+      if (!r.ok) return null;
+      let img = nativeImage.createFromBuffer(Buffer.from(await r.arrayBuffer()));
+      if (img.isEmpty()) return null;
+      const sz = img.getSize();
+      if (sz.width > 160 || sz.height > 160) img = img.resize(sz.width >= sz.height ? { width: 160 } : { height: 160 });
+      return img;
+    } catch (e) { return null; }
   }
 
   async function cycle() {
@@ -121,12 +141,20 @@ function start() {
   }
 
   // ---------- alerts ----------
-  function alertLive(u) {
+  async function alertLive(u) {
     const name = label(u);
-    showPopup(name);
+    const p = showPopup(name, u);
+    // The pop-up shows at once; its picture (and the Windows notification) follow
+    // when the preview has loaded, or after about 20 seconds without one.
+    const img = await Promise.race([getThumb(u), new Promise(r => setTimeout(() => r(null), 20000))]);
+    if (img) {
+      thumbs[u] = img.toDataURL();
+      if (p && !p.isDestroyed()) p.webContents.send('mgv:thumb', thumbs[u]);
+      push();
+    }
     if (cfg.toast && Notification.isSupported()) {
-      const n = new Notification({ title: 'Live now', body: name + ' just went live. Click to open MultiGridView.', silent: !cfg.sound });
-      n.on('click', openGrid);
+      const n = new Notification({ title: 'Live now', body: name + ' just went live. Click to open in MultiGridView.', silent: !cfg.sound, ...(img ? { icon: img } : {}) });
+      n.on('click', () => openGrid(u));
       n.show();
     } else if (cfg.sound) shell.beep();
   }
@@ -134,22 +162,28 @@ function start() {
     const wa = screen.getPrimaryDisplay().workArea;
     popups.forEach((p, i) => { if (!p.isDestroyed()) p.setPosition(wa.x + wa.width - 376, wa.y + wa.height - (i + 1) * 106 - 6); });
   }
-  function showPopup(name) {
+  function showPopup(name, user) {
     const p = new BrowserWindow({
       width: 360, height: 96, frame: false, resizable: false, movable: false, minimizable: false, maximizable: false,
       alwaysOnTop: true, skipTaskbar: true, show: false, backgroundColor: '#131a26',
       webPreferences: { preload: path.join(__dirname, 'alerts-preload.js'), contextIsolation: true, nodeIntegration: false, sandbox: true }
     });
     p.setAlwaysOnTop(true, 'screen-saver');
+    p.__user = user;
     p.loadFile(path.join(__dirname, 'alerts-popup.html'), { query: { name } });
     p.once('ready-to-show', () => p.showInactive());
     popups.unshift(p);
     while (popups.length > 4) { const old = popups.pop(); if (!old.isDestroyed()) old.close(); }
     p.on('closed', () => { const i = popups.indexOf(p); if (i >= 0) popups.splice(i, 1); layoutPopups(); });
     layoutPopups();
+    return p;
   }
-  function openGrid() {
+  // Opens the grid. With a broadcaster, the grid adds them to the streams it is
+  // already showing (or starts with your list plus them). A running grid gets
+  // the request through Windows' single-instance hand-off.
+  function openGrid(user) {
     const args = app.isPackaged ? [] : [app.getAppPath()];
+    if (typeof user === 'string' && /^[\w.\-]{1,64}$/.test(user)) args.push('mgv-open=' + user);
     try { spawn(process.execPath, args, { detached: true, stdio: 'ignore' }).unref(); } catch (e) {}
   }
 
@@ -169,7 +203,7 @@ function start() {
     return {
       cfg, running, nextAt, ready,
       startWithWindows: process.platform === 'win32' ? app.getLoginItemSettings({ path: process.execPath, args: ['--alerts'] }).openAtLogin : false,
-      rows: cfg.users.map((u, i) => ({ user: u, label: label(u), live: status[u] ? status[u].live : null, checked: status[u] ? status[u].checked : 0 }))
+      rows: cfg.users.map((u, i) => ({ user: u, label: label(u), live: status[u] ? status[u].live : null, checked: status[u] ? status[u].checked : 0, thumb: status[u] && status[u].live ? thumbs[u] || null : null }))
     };
   }
   function push() {
@@ -193,9 +227,9 @@ function start() {
   });
   ipcMain.handle('mgv:check', () => { if (!running) schedule(100); return state(); });
   ipcMain.handle('mgv:pause', (e, p) => { cfg.paused = !!p; save(); push(); return state(); });
-  ipcMain.on('mgv:open-grid', () => openGrid());
+  ipcMain.on('mgv:open-grid', (e, user) => openGrid(user));
   ipcMain.on('mgv:popup-close', e => { const w = BrowserWindow.fromWebContents(e.sender); if (w) w.close(); });
-  ipcMain.on('mgv:popup-open', e => { openGrid(); const w = BrowserWindow.fromWebContents(e.sender); if (w) w.close(); });
+  ipcMain.on('mgv:popup-open', e => { const w = BrowserWindow.fromWebContents(e.sender); openGrid(w && w.__user); if (w) w.close(); });
 
   // ---------- tray ----------
   function buildMenu() {
@@ -203,7 +237,7 @@ function start() {
     tray.setContextMenu(Menu.buildFromTemplate([
       { label: `${liveCount()} of ${cfg.users.length} live`, enabled: false },
       { type: 'separator' },
-      { label: 'Open MultiGridView', click: openGrid },
+      { label: 'Open MultiGridView', click: () => openGrid() },
       { label: 'Alerts settings…', click: openSettings },
       { label: 'Check now', enabled: !running && !cfg.paused, click: () => schedule(100) },
       { label: 'Pause alerts', type: 'checkbox', checked: cfg.paused, click: m => { cfg.paused = m.checked; save(); push(); } },

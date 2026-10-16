@@ -70,12 +70,19 @@ html.sp-anon .sp-name .nm{display:none;} html.sp-anon .sp-name .an{display:inlin
 .sp-body{position:relative;flex:1;min-height:0;margin:0 6px 6px;border-radius:10px;overflow:hidden;background:#000;}
 .sp-body iframe{position:absolute;inset:0;width:100%;height:100%;border:0;background:#000;}
 .sp-zoomer{position:absolute;inset:0;z-index:2;touch-action:none;cursor:zoom-in;display:none;}
-.sp-cell.live .sp-zoomer{display:block;}
+.sp-cell.live.vready .sp-zoomer{display:block;}
 .sp-cell.zoomed .sp-zoomer{cursor:grab;} .sp-cell.zoomed .sp-zoomer.drag{cursor:grabbing;}
 .sp-chat{z-index:3;}
 #sp-root .sp-zm{width:auto;min-width:30px;padding:0 7px;font-size:12px;font-variant-numeric:tabular-nums;display:none;}
 #sp-root .sp-cell.zoomed .sp-zm{display:grid;}
-.sp-cell:not(.live) iframe{opacity:.35;}
+.sp-cell:not(.vready) iframe{opacity:0 !important;pointer-events:none !important;}
+.sp-wait{position:absolute;inset:0;z-index:1;display:grid;place-items:center;align-content:center;gap:10px;color:var(--muted);font-size:13px;text-align:center;padding:12px;}
+.sp-cell.vready .sp-wait{display:none;}
+.sp-spin{width:22px;height:22px;border-radius:50%;border:2px solid var(--line2);border-top-color:var(--accent2);animation:sp-spin 1s linear infinite;}
+.sp-cell.off .sp-spin{display:none;}
+@keyframes sp-spin{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.sp-spin{animation:none;}}
+.sp-cell.sp-flash{border-color:var(--accent);box-shadow:0 0 0 3px rgba(79,125,255,.45);transition:box-shadow .3s;}
 .sp-cell.hidden iframe{opacity:0 !important;pointer-events:none;}
 html.sp-allhide #sp-grid{opacity:0 !important;pointer-events:none !important;}
 #sp-dock{position:absolute;left:12px;right:12px;bottom:14px;width:fit-content;margin:0 auto;display:flex;flex-wrap:wrap;align-items:stretch;background:var(--panel);border:1px solid var(--line2);border-radius:18px;box-shadow:0 10px 30px rgba(0,0,0,.45);padding:8px 4px;box-sizing:border-box;}
@@ -153,7 +160,7 @@ html.sp-anon .sp-chat .ln b{display:none;}
     // unless a picture setting is switched on.
     try {
       const d = f.contentDocument, c = window.__spFindVid(d);
-      if (!c) return;
+      if (!c) return false;
       let s = d.getElementById('vo');
       if (!s) { s = d.createElement('style'); s.id = 'vo'; d.head.appendChild(s); }
       const iw = (c.tagName === 'VIDEO' ? c.videoWidth : c.width) || 720, ih = (c.tagName === 'VIDEO' ? c.videoHeight : c.height) || 1280;
@@ -165,7 +172,8 @@ html.sp-anon .sp-chat .ln b{display:none;}
       const css = `body *{visibility:hidden !important;} html,body{background:#000 !important;}
         [data-sp-v]{visibility:visible !important;position:fixed !important;left:${left}px !important;top:${top}px !important;right:auto !important;bottom:auto !important;margin:0 !important;transform:none !important;width:${dw / r}px !important;height:${dh / r}px !important;max-width:none !important;max-height:none !important;object-fit:contain !important;filter:none !important;}`;
       if (s.textContent !== css) s.textContent = css;
-    } catch (e) {}
+      return true;
+    } catch (e) { return false; }
   }
   // ---------- per-cell zoom ----------
   // Wheel or pinch to zoom, drag to pan, double-click / double-tap or the badge to reset.
@@ -269,6 +277,8 @@ html.sp-anon .sp-chat .ln b{display:none;}
   function openUser(f, user) {
     f.dataset.user = user;
     clearInterval(f.__spNav);
+    const cellEl = f.closest('.sp-cell');
+    if (cellEl) { cellEl.classList.remove('vready'); clearTimeout(f.__spReadyT); f.__spReadyT = 0; }
     let loadedAt = 0;
     f.onload = () => {
       f.onload = null; loadedAt = Date.now();
@@ -296,7 +306,7 @@ html.sp-anon .sp-chat .ln b{display:none;}
       <button class="sp-ic sp-snd" title="Sound on/off" aria-label="Sound on/off">${ICON.mute}</button>
       <button class="sp-ic sp-hide" title="Hide this stream" aria-label="Hide this stream">${ICON.eyeOff}</button>
       <button class="sp-ic sp-x" title="Remove" aria-label="Remove">${ICON.x}</button></div>
-      <div class="sp-body"><iframe allow="autoplay; fullscreen"></iframe><div class="sp-zoomer" title="Scroll or pinch to zoom, drag to move, double-click to reset"></div></div>`;
+      <div class="sp-body"><div class="sp-wait"><div class="sp-spin"></div><div class="sp-msg">Connecting…</div></div><iframe allow="autoplay; fullscreen"></iframe><div class="sp-zoomer" title="Scroll or pinch to zoom, drag to move, double-click to reset"></div></div>`;
     const f = el.querySelector('iframe'), nm = el.querySelector('.nm'), st = el.querySelector('.sp-st'), hide = el.querySelector('.sp-hide');
     nm.textContent = '@' + user;
     el.querySelector('.an').textContent = 'Cell ' + (idx + 1);
@@ -307,15 +317,28 @@ html.sp-anon .sp-chat .ln b{display:none;}
     el.querySelector('.sp-x').onclick = () => { const list = parse(input.value); list.splice(idx, 1); input.value = list.join(', '); build(list); };
     const url = () => { try { return f.contentWindow.location.href; } catch (e) { return ''; } };
     const disp = () => { try { const t = f.contentDocument.title; return (t.match(/^(.*?) (Live Stream - Watch|\(@)/) || [])[1] || (f.contentDocument.querySelector('h1')?.textContent || '').trim().slice(0, 40); } catch (e) { return ''; } };
+    const msg = el.querySelector('.sp-msg');
+    let checks = 0;
     const check = () => {
+      checks++;
       const live = url().includes('/stream/') || (() => { try { return / Live Stream - Watch/.test(f.contentDocument.title || ''); } catch (e) { return false; } })();
       el.classList.toggle('live', live);
-      if (live) { styleInner(f); applyZoom(f, el, user); }
+      if (live) {
+        const ok = styleInner(f); applyZoom(f, el, user);
+        // Show the frame a moment after the video-only view is applied, so the
+        // page itself (loading screen, sign-in button, menus) is never seen.
+        if (ok && !el.classList.contains('vready') && !f.__spReadyT) f.__spReadyT = setTimeout(() => { f.__spReadyT = 0; if (el.classList.contains('live')) el.classList.add('vready'); }, 300);
+      } else { el.classList.remove('vready'); clearTimeout(f.__spReadyT); f.__spReadyT = 0; }
+      // "Not live" only after the cell has had time to reach the profile.
+      const off = !live && checks > 20;
+      el.classList.toggle('off', off);
+      msg.textContent = live ? 'Starting video…' : off ? 'Not live right now' : 'Connecting…';
       const dn = disp();
       nm.textContent = '@' + user + (dn ? ' (' + dn + ')' : '');
-      st.textContent = live ? '· LIVE' : '· not live';
+      st.textContent = live ? '· LIVE' : off ? '· not live' : '· checking…';
     };
-    window.__spTimers.push(setInterval(check, 4000));
+    // Fast checks while the cell is getting ready, then every 4 seconds.
+    window.__spTimers.push(setInterval(() => { const busy = !el.classList.contains('vready') && !el.classList.contains('off'); if (busy || checks % 5 === 0) check(); else checks++; }, 800));
     // Every minute: if this cell isn't on a stream, ask the lookup and open the stream
     // when it starts (a full reload every 5th minute as a fallback). If it is on a
     // stream that has ended, go back to the profile.
@@ -370,6 +393,31 @@ html.sp-anon .sp-chat .ln b{display:none;}
     list.forEach((u, i) => grid.appendChild(cell(u, i)));
     requestAnimationFrame(() => layout(list.length));
   }
+  // Add one broadcaster to the grid that is already running (or point at their cell
+  // if they're already in it). Used when an alert's "Open in MultiGridView" is clicked.
+  function flash(el) {
+    el.classList.add('sp-flash');
+    try { el.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); } catch (e) {}
+    setTimeout(() => el.classList.remove('sp-flash'), 6000);
+  }
+  window.__spAddUser = raw => {
+    const u = parse(String(raw || ''))[0];
+    if (!u) return false;
+    const list = parse(input.value);
+    const at = list.findIndex(x => x.toLowerCase() === u.toLowerCase());
+    if (grid.classList.contains('focus')) setFocus(null);
+    if (at >= 0) { const el = grid.querySelectorAll('.sp-cell')[at]; if (el) flash(el); return true; }
+    list.push(u);
+    input.value = list.join(', ');
+    store.set(KEY, JSON.stringify(list));
+    grid.querySelector('.sp-empty')?.remove();
+    const el = cell(u, list.length - 1);
+    grid.appendChild(el);
+    layout(list.length);
+    requestAnimationFrame(() => layout(list.length));
+    flash(el);
+    return true;
+  };
   window.addEventListener('resize', () => { const n = grid.querySelectorAll('.sp-cell').length; if (n) layout(n); });
   D.addEventListener('keydown', e => { if (e.key === 'Escape' && grid.classList.contains('focus') && !D.fullscreenElement) setFocus(null); });
   const dock = $('sp-dock');

@@ -19,6 +19,24 @@ app.userAgentFallback = app.userAgentFallback.replace(/\s(Electron|multigridview
 if (!app.requestSingleInstanceLock()) { app.quit(); }
 
 let win;
+// A broadcaster handed over by an alert ("Open in MultiGridView"). Added to the
+// grid as soon as the grid script is running; queued until then.
+let gridReady = false;
+const pendingOpen = [];
+const openArg = argv => { const a = (argv || []).find(x => typeof x === 'string' && x.startsWith('mgv-open=')); const u = a && a.slice(9); return u && /^[\w.\-]{1,64}$/.test(u) ? u : null; };
+function deliverOpen() {
+  if (!gridReady || !win || win.isDestroyed()) return;
+  while (pendingOpen.length) {
+    const u = pendingOpen.shift();
+    win.webContents.executeJavaScript(`window.__spAddUser && window.__spAddUser(${JSON.stringify(u)})`).catch(() => {});
+  }
+}
+function requestOpen(u) {
+  if (!u) return;
+  pendingOpen.push(u);
+  if (win && !win.isDestroyed()) { if (win.isMinimized()) win.restore(); win.show(); win.focus(); }
+  deliverOpen();
+}
 function createWindow() {
   Menu.setApplicationMenu(null);
   win = new BrowserWindow({
@@ -32,8 +50,14 @@ function createWindow() {
 
   const wc = win.webContents;
   // Inject the grid whenever the main page finishes loading (also after F5).
+  // A new grid page (reload, reconnect) needs the script again before cells can be added.
+  wc.on('did-start-navigation', (e, url, inPlace, isMain) => {
+    const main = e && e.isMainFrame !== undefined ? e.isMainFrame : isMain;
+    const same = e && e.isSameDocument !== undefined ? e.isSameDocument : inPlace;
+    if (main && !same) gridReady = false;
+  });
   wc.on('did-finish-load', () => {
-    if (wc.getURL().startsWith(START_URL)) wc.executeJavaScript(GRID).catch(err => console.error('grid inject failed', err));
+    if (wc.getURL().startsWith(START_URL)) wc.executeJavaScript(GRID).then(() => { gridReady = true; deliverOpen(); }).catch(err => console.error('grid inject failed', err));
   });
   // Keep the main window on the grid page; open other sites in the normal browser.
   wc.on('will-navigate', (e, url) => {
@@ -138,6 +162,10 @@ function openAccount() {
 }
 ipcMain.on('mgv:account', () => openAccount());
 
-app.on('second-instance', () => { if (win) { if (win.isMinimized()) win.restore(); win.focus(); } });
-app.whenReady().then(() => { diagLog({ start: 'grid', app: app.getVersion(), chrome: process.versions.chrome, electron: process.versions.electron, ua: app.userAgentFallback }); createWindow(); setTimeout(exportSession, 15000); setInterval(exportSession, 30 * 60000); });
+app.on('second-instance', (e, argv) => {
+  const u = openArg(argv);
+  if (u) return requestOpen(u);
+  if (win) { if (win.isMinimized()) win.restore(); win.focus(); }
+});
+app.whenReady().then(() => { diagLog({ start: 'grid', app: app.getVersion(), chrome: process.versions.chrome, electron: process.versions.electron, ua: app.userAgentFallback }); createWindow(); requestOpen(openArg(process.argv)); setTimeout(exportSession, 15000); setInterval(exportSession, 30 * 60000); });
 app.on('window-all-closed', () => app.quit());

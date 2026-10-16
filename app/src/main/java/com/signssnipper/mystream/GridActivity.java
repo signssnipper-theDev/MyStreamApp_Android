@@ -24,6 +24,7 @@ import android.webkit.WebViewClient;
 public class GridActivity extends Activity {
     static final String START = "https://www.tango.me/robots.txt";
     static final int REQ_ACCOUNT = 1;
+    static final String EXTRA_OPEN = "mgv_open";
 
     // Lets the grid's dock open the account and alerts screens. On a phone the
     // dock starts shrunk to one "Controls" button to leave room for the streams.
@@ -33,12 +34,16 @@ public class GridActivity extends Activity {
 
     private WebView web;
     private String gridJs;
+    // A broadcaster handed over by a go-live notification, added once the grid runs.
+    private final java.util.ArrayList<String> pendingOpen = new java.util.ArrayList<>();
+    private boolean gridReady = false;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         gridJs = Util.asset(this, "grid.js");
+        takeOpen(getIntent());
 
         web = new WebView(this);
         web.setBackgroundColor(Color.parseColor("#0c1018"));
@@ -59,8 +64,13 @@ public class GridActivity extends Activity {
         web.setWebChromeClient(new WebChromeClient());
         web.setWebViewClient(new WebViewClient() {
             @Override
+            public void onPageStarted(WebView view, String url, android.graphics.Bitmap favicon) {
+                gridReady = false;
+            }
+
+            @Override
             public void onPageFinished(WebView view, String url) {
-                if (url != null && url.startsWith(START)) view.evaluateJavascript(SHIM + gridJs, null);
+                if (url != null && url.startsWith(START)) view.evaluateJavascript(SHIM + gridJs, v -> { gridReady = true; deliverOpen(); });
             }
 
             @Override
@@ -71,6 +81,28 @@ public class GridActivity extends Activity {
             }
         });
         web.loadUrl(START);
+    }
+
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        takeOpen(intent);
+        deliverOpen();
+    }
+
+    private void takeOpen(Intent i) {
+        String u = i == null ? null : i.getStringExtra(EXTRA_OPEN);
+        if (u != null && u.matches("[\\w.\\-]{1,64}")) pendingOpen.add(u);
+        if (i != null) i.removeExtra(EXTRA_OPEN);
+    }
+
+    private void deliverOpen() {
+        if (!gridReady || web == null) return;
+        while (!pendingOpen.isEmpty()) {
+            String u = pendingOpen.remove(0);
+            web.evaluateJavascript("window.__spAddUser&&window.__spAddUser(" + org.json.JSONObject.quote(u) + ")", null);
+        }
     }
 
     class Bridge {

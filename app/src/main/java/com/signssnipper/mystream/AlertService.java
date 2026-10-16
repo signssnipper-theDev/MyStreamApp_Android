@@ -89,14 +89,26 @@ public class AlertService extends Service {
     }
 
     private void notifyLive(String user, int index) {
-        Notification n = new Notification.Builder(this, CH_LIVE)
+        int id = 1000 + Math.max(0, index);
+        NotificationManager nm = getSystemService(NotificationManager.class);
+        nm.notify(id, liveNotification(user, index, null));
+        // Add the stream's preview picture when it has loaded (quietly, same notification).
+        Thumb.fetch(this, user, pic -> {
+            if (pic == null) return;
+            try { nm.notify(id, liveNotification(user, index, pic)); } catch (Exception ignored) {}
+        });
+    }
+
+    private Notification liveNotification(String user, int index, android.graphics.Bitmap pic) {
+        Notification.Builder b = new Notification.Builder(this, CH_LIVE)
                 .setSmallIcon(R.drawable.ic_stat)
                 .setContentTitle("Live now")
-                .setContentText(Prefs.label(this, user) + " just went live")
+                .setContentText(Prefs.label(this, user) + " just went live. Tap to open in MyStream.")
                 .setAutoCancel(true)
-                .setContentIntent(openGrid())
-                .build();
-        getSystemService(NotificationManager.class).notify(1000 + Math.max(0, index), n);
+                .setOnlyAlertOnce(true)
+                .setContentIntent(openGrid(user, index));
+        if (pic != null) b.setLargeIcon(pic);
+        return b.build();
     }
 
     private Notification runningNotification(String text) {
@@ -111,9 +123,12 @@ public class AlertService extends Service {
                 .build();
     }
 
-    private PendingIntent openGrid() {
-        Intent i = new Intent(this, GridActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
-        return PendingIntent.getActivity(this, 0, i, PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
+    /** Opens the grid with this broadcaster added (to the streams already showing, if it's open). */
+    private PendingIntent openGrid(String user, int index) {
+        Intent i = new Intent(this, GridActivity.class)
+                .putExtra(GridActivity.EXTRA_OPEN, user)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+        return PendingIntent.getActivity(this, 1000 + Math.max(0, index), i, PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
     }
 
     @Override

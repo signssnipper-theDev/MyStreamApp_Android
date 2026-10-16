@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; script-src 'self' 'unsafe-inline'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; script-src 'self' 'unsafe-inline'; img-src data:">
 <title>MultiGridView Alerts</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sora:wght@600;700&family=Figtree:wght@400;500;600;700&display=swap">
 <style>
@@ -37,6 +37,9 @@
   table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
   td{padding:7px 4px;border-top:1px solid var(--line)}
   td.st{width:110px} td.t{width:120px;text-align:right;color:var(--muted);font-size:12px}
+  .who{display:flex;align-items:center;gap:9px;min-height:30px}
+  .who img{width:30px;height:30px;border-radius:7px;object-fit:cover;border:1px solid var(--line2);flex:none}
+  .who button{margin-left:auto;padding:4px 10px;font-size:12px}
   .dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--off);margin-right:7px}
   .live .dot{background:var(--live);box-shadow:0 0 0 3px rgba(255,77,106,.2)}
   .live .lbl{color:#ffb3c0;font-weight:600}
@@ -96,7 +99,10 @@
     if (!s.rows.length) { const tr = tb.insertRow(); const td = tr.insertCell(); td.colSpan = 3; td.className = 'empty'; td.textContent = 'No broadcasters yet. Add some above and click Save and check now.'; }
     for (const r of s.rows) {
       const tr = tb.insertRow(); if (r.live) tr.className = 'live';
-      const a = tr.insertCell(); a.textContent = r.label;
+      const a = tr.insertCell().appendChild(document.createElement('div')); a.className = 'who';
+      if (r.live && r.thumb && /^data:image\//.test(r.thumb)) { const im = document.createElement('img'); im.alt = ''; im.src = r.thumb; a.appendChild(im); }
+      a.appendChild(document.createTextNode(r.label));
+      if (r.live) { const ob = document.createElement('button'); ob.textContent = 'Open'; ob.title = 'Add to MultiGridView'; ob.onclick = () => window.mgv.openGrid(r.user); a.appendChild(ob); }
       const b = tr.insertCell(); b.className = 'st'; b.innerHTML = '<span class="dot"></span><span class="lbl"></span>';
       b.querySelector('.lbl').textContent = r.live === true ? 'Live' : r.live === false ? 'Offline' : (s.running ? 'Checking…' : 'Unknown');
       const c = tr.insertCell(); c.className = 't'; c.textContent = ago(r.checked);

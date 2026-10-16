@@ -63,4 +63,42 @@ window.__mgvCheckDetail = async (user) => {
   return { live, status, err, via: 'page' };
 };
 window.__mgvCheck = async (user) => (await window.__mgvCheckDetail(user)).live;
+
+// Preview image for an alert: the same picture Tango shows on its live tiles and
+// while a stream loads. Opens the broadcaster's stream in a hidden frame (as the
+// live check does), reads that picture's address and closes the frame.
+// Resolves the image address, or null.
+window.__mgvThumb = (user) => new Promise(resolve => {
+  const f = document.createElement('iframe');
+  f.style.cssText = 'position:fixed;left:0;top:0;width:420px;height:760px;border:0;opacity:0;pointer-events:none';
+  let done = false, loadedAt = 0, navAt = 0;
+  const timers = [];
+  const finish = v => {
+    if (done) return; done = true;
+    timers.forEach(clearInterval);
+    try { f.src = 'about:blank'; } catch (e) {}
+    setTimeout(() => f.remove(), 300);
+    resolve(v);
+  };
+  const doc = () => { try { return f.contentDocument; } catch (e) { return null; } };
+  f.onload = () => { if (!loadedAt) loadedAt = Date.now(); };
+  timers.push(setInterval(() => {
+    const d = doc(); if (!loadedAt || !d) return;
+    if (!navAt) {
+      const rendered = d.querySelector('[data-testid]');
+      if ((rendered && Date.now() - loadedAt > 1500) || Date.now() - loadedAt > 8000) {
+        try { const w = f.contentWindow; w.history.pushState({}, '', '/' + user); w.dispatchEvent(new PopStateEvent('popstate', { state: {} })); } catch (e) {}
+        navAt = Date.now();
+      }
+      return;
+    }
+    const img = d.querySelector('[data-testid^="stream-ph-"] img');
+    const src = img && img.getAttribute('src');
+    if (src && /^https:\/\/cget\.tango\.me\/contentserver\/download\//.test(src)) return finish(src.split('?')[0] + '?resize=240%3A240');
+    if (Date.now() - navAt > 15000) finish(null);
+  }, 500));
+  timers.push(setTimeout(() => finish(null), 30000));
+  f.src = location.origin + '/';
+  document.body.appendChild(f);
+});
 true;
