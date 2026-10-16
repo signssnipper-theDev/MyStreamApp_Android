@@ -264,6 +264,9 @@ html.sp-anon .sp-chat .ln b{display:none;}
     store.set('sp_repair_stage', String(stage));
     store.set('sp_note', 'Live detection was being refused by the site, so the app reset its connection and is checking again.');
     if (window.mgvApp.log) window.mgvApp.log({ why: 'session-repair', stage, status, body });
+    // The site keeps its session in cookies and in page storage; clear both together
+    // (your grid settings, the sp_ entries, are kept).
+    try { Object.keys(localStorage).filter(k => !k.startsWith('sp_')).forEach(k => localStorage.removeItem(k)); sessionStorage.clear(); } catch (e) {}
     window.mgvApp.resetSession(stage);
   }
 

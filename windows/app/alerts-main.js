@@ -47,15 +47,13 @@ function start() {
   const label = u => cfg.hideNames ? 'Broadcaster ' + (cfg.users.indexOf(u) + 1) : '@' + u;
   const liveCount = () => cfg.users.filter(u => status[u] && status[u].live).length;
 
-  // ---------- no sign-in ----------
-  // Checks always run as a visitor. A sign-in shared by an earlier version is removed.
-  async function dropOldSignIn() {
-    for (const c of await session.defaultSession.cookies.get({})) {
-      const host = (c.domain || '').replace(/^\./, '');
-      if (/(^|\.)tango\.me$/.test(host) && ['tt', 'ttu', 'tte', 'Tango-SD'].includes(c.name)) {
-        try { await session.defaultSession.cookies.remove('https://' + host + (c.path || '/'), c.name); } catch (e) {}
-      }
-    }
+  // ---------- fresh visitor session ----------
+  // Checks run as a visitor. The site keeps its session in two places (cookies and
+  // the page's own storage); removing only one leaves them out of step and every
+  // lookup is refused ("Jwt is missing"). So the alerts app clears both together.
+  // Nothing of yours is kept there: your list and settings are in alerts.json.
+  async function freshVisitor() {
+    try { await session.defaultSession.clearStorageData(); } catch (e) {}
     try { fs.unlinkSync(path.join(app.getPath('userData'), 'tango-session.json')); } catch (e) {}
   }
 
@@ -79,22 +77,16 @@ function start() {
   }
 
   // ---------- session repair ----------
-  // The live lookup needs a valid session. After repeated "not authorized"
-  // answers: stage 1 removes the expired sign-in cookies, stage 2 every cookie
-  // of the site; the next page-based check then gets a fresh visitor session.
-  let auth401 = 0, repairStage = 0, repairAt = 0;
+  // After repeated "not authorized" answers, start a fresh visitor session once
+  // (cookies and site storage together) and reload. Not repeated until a check
+  // succeeds again; meanwhile the page-based check keeps working.
+  let auth401 = 0, repaired = false;
   async function authTrouble() {
     auth401++;
-    if (auth401 < 3 || Date.now() - repairAt < 120000) return;
-    auth401 = 0; repairAt = Date.now(); repairStage = Math.min(2, repairStage + 1);
-    let n = 0;
-    for (const c of await session.defaultSession.cookies.get({})) {
-      const host = (c.domain || '').replace(/^\./, '');
-      if (!/(^|\.)tango\.me$/.test(host)) continue;
-      if (repairStage < 2 && !['tt', 'ttu', 'tte', 'Tango-SD'].includes(c.name)) continue;
-      try { await session.defaultSession.cookies.remove('https://' + host + (c.path || '/'), c.name); n++; } catch (e) {}
-    }
-    checkLog({ why: 'session-reset', stage: repairStage, removed: n });
+    if (auth401 < 3 || repaired) return;
+    auth401 = 0; repaired = true;
+    await freshVisitor();
+    checkLog({ why: 'session-reset' });
     if (checkerWin && !checkerWin.isDestroyed()) { ready = false; checkerWin.webContents.loadURL(START_URL); }
   }
 
@@ -103,7 +95,7 @@ function start() {
     let live = null, det = null;
     try { det = await checkerWin.webContents.executeJavaScript(`window.__mgvCheckDetail(${JSON.stringify(u)})`); live = det ? det.live : null; } catch (e) { det = { err: 'inject: ' + (e && e.message) }; }
     checkLog({ user: u, ...(det || {}), live });
-    if (det && (det.status === 401 || det.status === 403)) await authTrouble(); else if (det && (det.status === 200 || det.status === 404)) { auth401 = 0; repairStage = 0; }
+    if (det && (det.status === 401 || det.status === 403)) await authTrouble(); else if (det && (det.status === 200 || det.status === 404)) { auth401 = 0; repaired = false; }
     if (live === null || !cfg.users.includes(u)) return;
     const prev = status[u] ? status[u].live : null;
     status[u] = { live, checked: Date.now() };
@@ -272,7 +264,7 @@ function start() {
     tray.on('click', openSettings);
     tray.on('double-click', openSettings);
     push();
-    dropOldSignIn().finally(makeChecker);
+    freshVisitor().finally(makeChecker);
     if (!cfg.users.length) openSettings();
   });
 }

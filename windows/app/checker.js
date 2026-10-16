@@ -11,6 +11,7 @@ window.__mgvCheckFrame = (user) => new Promise(resolve => {
   const finish = v => {
     if (done) return; done = true;
     timers.forEach(clearInterval);
+    try { window.__mgvLastPath = (f.contentWindow.location.pathname || '') + ' | ' + (f.contentDocument.title || '').slice(-40); } catch (e) { window.__mgvLastPath = '?'; }
     try { f.src = 'about:blank'; } catch (e) {}
     setTimeout(() => f.remove(), 300);
     resolve(v);
@@ -40,7 +41,7 @@ window.__mgvCheckFrame = (user) => new Promise(resolve => {
     }
     const p = (win() && win().location.pathname) || '';
     if (p === '/' && navTries < 2 && Date.now() - navAt > 4000) return nav();   // bounced home: try once more
-    if (Date.now() - navAt > 15000) finish(false);
+    if (Date.now() - navAt > 25000) finish(false);
   }, 500));
   timers.push(setTimeout(() => finish(navAt ? false : null), 40000));
   f.src = location.origin + '/';
@@ -61,7 +62,7 @@ window.__mgvCheckDetail = async (user) => {
     if (r.status === 200) { const b = await r.arrayBuffer(); if (b.byteLength > 0) return { live: true, status, via: 'lookup' }; }
   } catch (e) { err = e && e.message; }
   const live = await window.__mgvCheckFrame(user);
-  return { live, status, err, via: 'page' };
+  return { live, status, err, via: 'page', page: window.__mgvLastPath };
 };
 window.__mgvCheck = async (user) => (await window.__mgvCheckDetail(user)).live;
 

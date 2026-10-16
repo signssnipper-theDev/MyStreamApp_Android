@@ -79,7 +79,6 @@ public class GridActivity extends Activity {
                 return !req.getUrl().toString().startsWith(START);
             }
         });
-        dropSignInCookies();
         web.loadUrl(START);
     }
 

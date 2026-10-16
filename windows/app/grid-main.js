@@ -117,6 +117,9 @@ async function resetTangoCookies(ses, stage) {
     if (stage < 2 && !SIGNIN_COOKIES.includes(c.name)) continue;
     try { await jar.remove('https://' + host + (c.path || '/'), c.name); n++; } catch (e) {}
   }
+  for (const origin of ['https://www.tango.me', 'https://tango.me', 'https://gateway.tango.me']) {
+    try { await ses.clearStorageData({ origin, storages: ['indexdb', 'serviceworkers', 'cachestorage'] }); } catch (e) {}
+  }
   try { await jar.flushStore(); } catch (e) {}
   return n;
 }
@@ -132,7 +135,6 @@ ipcMain.on('mgv:reset-session', async (e, stage) => {
 // version (and the copy that used to be shared with the alerts app) is removed
 // at start, so live checks always run as a visitor.
 async function dropOldSignIn() {
-  try { await resetTangoCookies(session.defaultSession, 1); } catch (e) {}
   try { fs.unlinkSync(path.join(app.getPath('appData'), 'MultiGridView Alerts', 'tango-session.json')); } catch (e) {}
 }
 
