@@ -39,11 +39,6 @@
             </intent-filter>
         </activity>
 
-        <activity
-            android:name=".AccountActivity"
-            android:exported="false"
-            android:label="Tango account"
-            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden" />
 
         <service
             android:name=".AlertService"

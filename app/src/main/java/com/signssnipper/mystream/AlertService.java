@@ -82,8 +82,10 @@ public class AlertService extends Service {
             }
             Prefs.saveStatus(this, status);
             String time = DateFormat.getTimeInstance(DateFormat.SHORT).format(new Date());
-            getSystemService(NotificationManager.class).notify(ID_RUNNING,
-                    runningNotification(live + " of " + users.size() + " live · checked " + time));
+            String runText = Lookup.lastStatus == 401 || Lookup.lastStatus == 403
+                    ? "Can't check right now: open MyStream once so it can reconnect"
+                    : live + " of " + users.size() + " live · checked " + time;
+            getSystemService(NotificationManager.class).notify(ID_RUNNING, runningNotification(runText));
             sendBroadcast(new Intent(ACTION_UPDATE).setPackage(getPackageName()));
         } catch (Exception ignored) {}
     }

@@ -2,7 +2,7 @@
 
 Android version of MultiGridView: a multi-stream grid for Tango Live, plus go-live alerts.
 
-- **MyStream**: the grid. Tap **Controls** at the bottom for the dock (list, view, picture, chat, Tango account, Alerts).
+- **MyStream**: the grid. Tap **Controls** at the bottom for the dock (list, view, picture, chat, Alerts).
 - **MyStream Alerts**: checks your list every few minutes and notifies you when someone goes live.
 
 ## Install on your phone
@@ -15,7 +15,7 @@ Every push to `main` builds the APK on GitHub (Actions) and publishes it as a re
 Builds are signed with the key stored in the repository secrets `KEYSTORE_B64` and `KEYSTORE_PASSWORD`.
 Without those secrets a test (debug) build is published instead.
 
-The grid is view-only. The app never records streams. Your Tango password is typed into Tango's own site, never into the app.
+The grid is view-only. The app never records streams and never signs in to an account.
 
 ## Windows app (`windows/`)
 MultiGridView for Windows: the same grid plus **MultiGridView Alerts**, built into a normal installer.

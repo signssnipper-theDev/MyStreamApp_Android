@@ -23,13 +23,12 @@ import android.webkit.WebViewClient;
  */
 public class GridActivity extends Activity {
     static final String START = "https://www.tango.me/robots.txt";
-    static final int REQ_ACCOUNT = 1;
     static final String EXTRA_OPEN = "mgv_open";
 
     // Lets the grid's dock open the account and alerts screens. On a phone the
     // dock starts shrunk to one "Controls" button to leave room for the streams.
     static final String SHIM =
-            "window.mgvApp={openAccount:function(){MgvAndroid.openAccount()},openAlerts:function(){MgvAndroid.openAlerts()},log:function(){}};"
+            "window.mgvApp={openAlerts:function(){MgvAndroid.openAlerts()},resetSession:function(s){MgvAndroid.resetSession(s|0)},log:function(){}};"
             + "try{if(localStorage.getItem('sp_dock_small')===null)localStorage.setItem('sp_dock_small','1')}catch(e){}\n";
 
     private WebView web;
@@ -105,24 +104,43 @@ public class GridActivity extends Activity {
         }
     }
 
-    class Bridge {
-        @JavascriptInterface
-        public void openAccount() {
-            runOnUiThread(() -> startActivityForResult(new Intent(GridActivity.this, AccountActivity.class), REQ_ACCOUNT));
+    /** Removes any sign-in left from an earlier version; the app runs as a visitor. */
+    static void dropSignInCookies() {
+        CookieManager cm = CookieManager.getInstance();
+        String[] names = {"tt", "ttu", "tte", "Tango-SD"};
+        String[] hosts = {"https://gateway.tango.me", "https://www.tango.me", "https://tango.me"};
+        for (String h : hosts) for (String n : names) {
+            cm.setCookie(h, n + "=; Max-Age=0; Path=/");
+            cm.setCookie(h, n + "=; Max-Age=0; Path=/; Domain=.tango.me");
         }
+        cm.flush();
+    }
 
+    class Bridge {
         @JavascriptInterface
         public void openAlerts() {
             runOnUiThread(() -> startActivity(new Intent(GridActivity.this, AlertsActivity.class)));
         }
+
+        /**
+         * The live lookup keeps answering "not authorized" (an expired sign-in the site
+         * couldn't renew). Stage 1 removes the sign-in cookies; stage 2 every cookie, so
+         * the site starts a fresh visitor session. Then reload the grid.
+         */
+        @JavascriptInterface
+        public void resetSession(int stage) {
+            runOnUiThread(() -> {
+                CookieManager cm = CookieManager.getInstance();
+                if (stage >= 2) {
+                    cm.removeAllCookies(ok -> { cm.flush(); if (web != null) web.reload(); });
+                } else {
+                    dropSignInCookies();
+                    if (web != null) web.reload();
+                }
+            });
+        }
     }
 
-    @Override
-    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
-        super.onActivityResult(requestCode, resultCode, data);
-        // Back from the Tango account screen: reload so every cell uses the new sign-in.
-        if (requestCode == REQ_ACCOUNT && web != null) web.reload();
-    }
 
     @Override
     protected void onResume() {
