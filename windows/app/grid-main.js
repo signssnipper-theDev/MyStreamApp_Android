@@ -104,68 +104,42 @@ function diagLog(o) {
 }
 ipcMain.on('mgv:log', (e, o) => diagLog(o && typeof o === 'object' ? o : { msg: String(o) }));
 
-// ---------- share your Tango sign-in with the alerts app ----------
-// Copies the tango.me sign-in cookies to the alerts app's folder so its checks
-// see what your account sees. Signing out here clears them there too.
-const SHARE = path.join(app.getPath('appData'), 'MultiGridView Alerts', 'tango-session.json');
-async function exportSession() {
-  try {
-    const all = await session.defaultSession.cookies.get({});
-    const mine = all.filter(c => /(^|\.)tango\.me$/.test((c.domain || '').replace(/^\./, '')));
-    fs.mkdirSync(path.dirname(SHARE), { recursive: true });
-    fs.writeFileSync(SHARE, JSON.stringify({ at: Date.now(), cookies: mine }));
-  } catch (e) {}
+// ---------- session repair ----------
+// Stage 1: remove the sign-in cookies (an expired sign-in the site could not renew).
+// Stage 2: remove every cookie of the site, so it starts a fresh visitor session.
+// Settings and lists live in the page's own storage and are not touched.
+const SIGNIN_COOKIES = ['tt', 'ttu', 'tte', 'Tango-SD'];
+async function resetTangoCookies(ses, stage) {
+  const jar = ses.cookies; let n = 0;
+  for (const c of await jar.get({})) {
+    const host = (c.domain || '').replace(/^\./, '');
+    if (!/(^|\.)tango\.me$/.test(host)) continue;
+    if (stage < 2 && !SIGNIN_COOKIES.includes(c.name)) continue;
+    try { await jar.remove('https://' + host + (c.path || '/'), c.name); n++; } catch (e) {}
+  }
+  try { await jar.flushStore(); } catch (e) {}
+  return n;
 }
+let lastReset = 0;
+ipcMain.on('mgv:reset-session', async (e, stage) => {
+  if (Date.now() - lastReset < 60000) return; lastReset = Date.now();
+  const n = await resetTangoCookies(session.defaultSession, stage === 2 ? 2 : 1);
+  diagLog({ why: 'session-reset', stage, removed: n });
+  if (win && !win.isDestroyed()) win.webContents.reload();
+});
 
-// ---------- Tango account window ----------
-// Opens Tango's own site so you can sign in (or out) yourself. The sign-in
-// cookie lives in the app's browser storage and is shared with the grid.
-let acctWin = null;
-const AUTH_HOSTS = /(^|\.)(tango\.me|google\.com|googleusercontent\.com|gstatic\.com|apple\.com|facebook\.com|twitter\.com|x\.com|telegram\.org|t\.me)$/;
-const isAuth = u => { try { return AUTH_HOSTS.test(new URL(u).hostname); } catch (e) { return false; } };
-function openAccount() {
-  if (acctWin && !acctWin.isDestroyed()) { acctWin.focus(); return; }
-  acctWin = new BrowserWindow({
-    width: 520, height: 860, minWidth: 380, minHeight: 560, parent: win || undefined,
-    title: 'Tango account', backgroundColor: '#0c1018', autoHideMenuBar: true,
-    webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true }
-  });
-  acctWin.setMenu(null);
-  const awc = acctWin.webContents;
-  // Google blocks its sign-in inside apps ("This browser or app may not be secure").
-  // Catch it before Google's error page and explain the sign-in options that work.
-  const isGoogleSignIn = u => { try { const h = new URL(u).hostname; return h === 'accounts.google.com' || h.endsWith('.accounts.google.com'); } catch (e) { return false; } };
-  let googleNoticeAt = 0;
-  const googleNotice = () => {
-    if (Date.now() - googleNoticeAt < 3000) return; googleNoticeAt = Date.now();
-    dialog.showMessageBox(acctWin, { type: 'info', title: 'Use Email or Phone sign-in', buttons: ['OK'],
-      message: 'Google sign-in does not work inside apps',
-      detail: 'Google blocks its sign-in in apps like this one, so please choose "Continue with Email" or "Continue with Phone" instead.\n\nIf your Tango account was created with Google only, add an email address or phone number to it first in the Tango app on your phone (in its account settings, if it offers that), then sign in here with that.' });
-  };
-  awc.on('will-navigate', (e, url) => {
-    if (isGoogleSignIn(url)) { e.preventDefault(); googleNotice(); return; }
-    if (!isAuth(url)) { e.preventDefault(); if (/^https?:/.test(url)) shell.openExternal(url); }
-  });
-  awc.on('did-create-window', w => {
-    w.webContents.on('will-navigate', (e, url) => { if (isGoogleSignIn(url)) { e.preventDefault(); googleNotice(); w.close(); } });
-    w.webContents.on('did-navigate', (e, url) => { if (isGoogleSignIn(url)) { googleNotice(); w.close(); } });
-  });
-  awc.setWindowOpenHandler(({ url }) => {
-    if (isGoogleSignIn(url)) { googleNotice(); return { action: 'deny' }; }
-    if (isAuth(url)) return { action: 'allow', overrideBrowserWindowOptions: { width: 500, height: 680, parent: acctWin, autoHideMenuBar: true } };
-    if (/^https?:/.test(url)) shell.openExternal(url);
-    return { action: 'deny' };
-  });
-  acctWin.loadURL(new URL(START_URL).origin + '/');
-  // When you close it, reload the grid so every cell uses the new sign-in state.
-  acctWin.on('closed', () => { acctWin = null; exportSession(); if (win && !win.isDestroyed()) win.webContents.reload(); });
+// The app no longer signs in to the site. Any sign-in left from an earlier
+// version (and the copy that used to be shared with the alerts app) is removed
+// at start, so live checks always run as a visitor.
+async function dropOldSignIn() {
+  try { await resetTangoCookies(session.defaultSession, 1); } catch (e) {}
+  try { fs.unlinkSync(path.join(app.getPath('appData'), 'MultiGridView Alerts', 'tango-session.json')); } catch (e) {}
 }
-ipcMain.on('mgv:account', () => openAccount());
 
 app.on('second-instance', (e, argv) => {
   const u = openArg(argv);
   if (u) return requestOpen(u);
   if (win) { if (win.isMinimized()) win.restore(); win.focus(); }
 });
-app.whenReady().then(() => { diagLog({ start: 'grid', app: app.getVersion(), chrome: process.versions.chrome, electron: process.versions.electron, ua: app.userAgentFallback }); createWindow(); requestOpen(openArg(process.argv)); setTimeout(exportSession, 15000); setInterval(exportSession, 30 * 60000); });
+app.whenReady().then(async () => { diagLog({ start: 'grid', app: app.getVersion(), chrome: process.versions.chrome, electron: process.versions.electron, ua: app.userAgentFallback }); await dropOldSignIn(); createWindow(); requestOpen(openArg(process.argv)); });
 app.on('window-all-closed', () => app.quit());

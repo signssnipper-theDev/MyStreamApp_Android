@@ -56,6 +56,7 @@ window.__mgvCheckDetail = async (user) => {
   try {
     const r = await fetch(base + '/stream-details-provider/public/byAlias?alias=' + encodeURIComponent(user), { credentials: 'include', cache: 'no-store' });
     status = r.status;
+    if (r.status === 401 || r.status === 403) { try { err = (await r.text()).slice(0, 80); } catch (e) {} }
     if (r.status === 404) return { live: false, status, via: 'lookup' };
     if (r.status === 200) { const b = await r.arrayBuffer(); if (b.byteLength > 0) return { live: true, status, via: 'lookup' }; }
   } catch (e) { err = e && e.message; }

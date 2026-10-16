@@ -144,7 +144,7 @@ html.sp-anon .sp-chat .ln b{display:none;}
   <div class="sp-sec"><h2>VIEW</h2><div class="sp-row"><button id="sp-anon-btn"></button><button id="sp-allhide"></button><button id="sp-fs"></button></div></div>
   <div class="sp-sec"><h2>PICTURE</h2><div class="sp-row"><button id="sp-fx-sharp"></button><button id="sp-fx-sat"></button><button id="sp-fx-tone"></button></div></div>
   <div class="sp-sec"><h2>CHAT</h2><div class="sp-row"><button id="sp-chat-btn"></button></div></div>
-  ${window.mgvApp ? '<div class="sp-sec"><h2>ACCOUNT</h2><div class="sp-row"><button id="sp-acct">Tango account</button>' + (window.mgvApp.openAlerts ? '<button id="sp-alerts">Alerts</button>' : '') + '</div></div>' : ''}
+  ${window.mgvApp && window.mgvApp.openAlerts ? '<div class="sp-sec"><h2>ALERTS</h2><div class="sp-row"><button id="sp-alerts">Alerts</button></div></div>' : ''}
   <button id="sp-dockmin" title="Shrink controls" aria-label="Shrink controls">–</button>
   <button id="sp-dockopen">Controls</button>
 </div>`;
@@ -250,13 +250,32 @@ html.sp-anon .sp-chat .ln b{display:none;}
     el.querySelector('.sp-zm').onclick = () => zset(f, el, u, 1, 0, 0);
   }
 
-  // Tango's own live lookup (sent with your Tango sign-in if you're signed in).
+  // ---------- keep the session usable ----------
+  // The live lookup needs a valid session. If it keeps answering "not authorized"
+  // (an expired sign-in the site couldn't renew), ask the app to repair it:
+  // stage 1 drops just the expired sign-in, stage 2 starts a fresh visitor session.
+  let auth401 = 0, repairStage = 0, repairAt = 0;
+  function sessionOk() { auth401 = 0; if (store.get('sp_repair_stage')) store.set('sp_repair_stage', ''); }
+  function sessionTrouble(status, body) {
+    auth401++;
+    if (auth401 < 3 || !window.mgvApp || !window.mgvApp.resetSession || Date.now() - repairAt < 90000) return;
+    let stage = 1; try { stage = Math.min(2, (+store.get('sp_repair_stage') || 0) + 1); } catch (e) {}
+    repairAt = Date.now(); auth401 = 0;
+    store.set('sp_repair_stage', String(stage));
+    store.set('sp_note', 'Live detection was being refused by the site, so the app reset its connection and is checking again.');
+    if (window.mgvApp.log) window.mgvApp.log({ why: 'session-repair', stage, status, body });
+    window.mgvApp.resetSession(stage);
+  }
+
+  // The site's own live lookup (runs as a visitor).
   // Returns {live:true,id} / {live:false} / null when it can't tell.
   const lastLookup = {};
   async function lookup(user) {
     try {
       const r = await fetch('https://gateway.tango.me/stream-details-provider/public/byAlias?alias=' + encodeURIComponent(user), { credentials: 'include', cache: 'no-store' });
       lastLookup[user] = r.status;
+      if (r.status === 401 || r.status === 403) { let body = ''; try { body = (await r.text()).slice(0, 80); } catch (e) {} lastLookup[user] = r.status + ' ' + body; sessionTrouble(r.status, body); return null; }
+      sessionOk();
       if (r.status === 404) return { live: false };
       if (r.status !== 200) return null;
       const b = new Uint8Array(await r.arrayBuffer()); let s = '';
@@ -441,7 +460,6 @@ html.sp-anon .sp-chat .ln b{display:none;}
 
   // ---------- account (Windows app only) ----------
   if (window.mgvApp && window.mgvApp.openAlerts && $('sp-alerts')) $('sp-alerts').onclick = () => window.mgvApp.openAlerts();
-  if (window.mgvApp && $('sp-acct')) { $('sp-acct').title = 'Sign in or out of Tango. The grid reloads when you close the window.'; $('sp-acct').onclick = () => window.mgvApp.openAccount(); }
 
   // ---------- view ----------
   H.classList.add('sp-anon');
@@ -579,4 +597,16 @@ html.sp-anon .sp-chat .ln b{display:none;}
   build(saved);
   stats(); syncSound();
   if (!saved.length) openPop(true);
+  // One-time note (e.g. after a session repair).
+  const note = store.get('sp_note');
+  if (note) {
+    store.set('sp_note', '');
+    const n = D.createElement('div');
+    n.setAttribute('role', 'status');
+    n.style.cssText = 'position:absolute;top:52px;left:50%;transform:translateX(-50%);max-width:min(560px,calc(100% - 24px));z-index:5;background:var(--panel);border:1px solid var(--accent);color:var(--ink);border-radius:12px;padding:10px 14px;font:13px/1.4 Figtree,system-ui,sans-serif;box-shadow:0 10px 30px rgba(0,0,0,.45);cursor:pointer';
+    n.textContent = note + '  (Click to close.)';
+    n.onclick = () => n.remove();
+    root.appendChild(n);
+    setTimeout(() => n.remove(), 20000);
+  }
 })();

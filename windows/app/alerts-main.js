@@ -47,26 +47,16 @@ function start() {
   const label = u => cfg.hideNames ? 'Broadcaster ' + (cfg.users.indexOf(u) + 1) : '@' + u;
   const liveCount = () => cfg.users.filter(u => status[u] && status[u].live).length;
 
-  // ---------- your Tango sign-in, shared by the grid app ----------
-  const SHARE = path.join(app.getPath('userData'), 'tango-session.json');
-  let shareStamp = -1;
-  async function importSession() {
-    let data = null, stamp = 0;
-    try { stamp = fs.statSync(SHARE).mtimeMs; } catch (e) { stamp = 0; }
-    if (stamp === shareStamp) return;
-    shareStamp = stamp;
-    try { if (stamp) data = JSON.parse(fs.readFileSync(SHARE, 'utf8')); } catch (e) {}
-    const jar = session.defaultSession.cookies;
-    try { for (const c of await jar.get({})) if (/(^|\.)tango\.me$/.test((c.domain || '').replace(/^\./, ''))) await jar.remove('https://' + c.domain.replace(/^\./, '') + c.path, c.name); } catch (e) {}
-    for (const c of (data && data.cookies) || []) {
-      try {
-        const host = c.domain.replace(/^\./, '');
-        const o = { url: 'https://' + host + (c.path || '/'), name: c.name, value: c.value, path: c.path, secure: c.secure, httpOnly: c.httpOnly, sameSite: c.sameSite };
-        if (!c.hostOnly) o.domain = c.domain;
-        if (c.expirationDate) o.expirationDate = c.expirationDate;
-        await jar.set(o);
-      } catch (e) {}
+  // ---------- no sign-in ----------
+  // Checks always run as a visitor. A sign-in shared by an earlier version is removed.
+  async function dropOldSignIn() {
+    for (const c of await session.defaultSession.cookies.get({})) {
+      const host = (c.domain || '').replace(/^\./, '');
+      if (/(^|\.)tango\.me$/.test(host) && ['tt', 'ttu', 'tte', 'Tango-SD'].includes(c.name)) {
+        try { await session.defaultSession.cookies.remove('https://' + host + (c.path || '/'), c.name); } catch (e) {}
+      }
     }
+    try { fs.unlinkSync(path.join(app.getPath('userData'), 'tango-session.json')); } catch (e) {}
   }
 
   // ---------- hidden checker page ----------
@@ -88,11 +78,32 @@ function start() {
     wc.loadURL(START_URL);
   }
 
+  // ---------- session repair ----------
+  // The live lookup needs a valid session. After repeated "not authorized"
+  // answers: stage 1 removes the expired sign-in cookies, stage 2 every cookie
+  // of the site; the next page-based check then gets a fresh visitor session.
+  let auth401 = 0, repairStage = 0, repairAt = 0;
+  async function authTrouble() {
+    auth401++;
+    if (auth401 < 3 || Date.now() - repairAt < 120000) return;
+    auth401 = 0; repairAt = Date.now(); repairStage = Math.min(2, repairStage + 1);
+    let n = 0;
+    for (const c of await session.defaultSession.cookies.get({})) {
+      const host = (c.domain || '').replace(/^\./, '');
+      if (!/(^|\.)tango\.me$/.test(host)) continue;
+      if (repairStage < 2 && !['tt', 'ttu', 'tte', 'Tango-SD'].includes(c.name)) continue;
+      try { await session.defaultSession.cookies.remove('https://' + host + (c.path || '/'), c.name); n++; } catch (e) {}
+    }
+    checkLog({ why: 'session-reset', stage: repairStage, removed: n });
+    if (checkerWin && !checkerWin.isDestroyed()) { ready = false; checkerWin.webContents.loadURL(START_URL); }
+  }
+
   async function checkOne(u) {
     if (!ready || !checkerWin || checkerWin.isDestroyed()) return;
     let live = null, det = null;
     try { det = await checkerWin.webContents.executeJavaScript(`window.__mgvCheckDetail(${JSON.stringify(u)})`); live = det ? det.live : null; } catch (e) { det = { err: 'inject: ' + (e && e.message) }; }
     checkLog({ user: u, ...(det || {}), live });
+    if (det && (det.status === 401 || det.status === 403)) await authTrouble(); else if (det && (det.status === 200 || det.status === 404)) { auth401 = 0; repairStage = 0; }
     if (live === null || !cfg.users.includes(u)) return;
     const prev = status[u] ? status[u].live : null;
     status[u] = { live, checked: Date.now() };
@@ -125,7 +136,6 @@ function start() {
     if (running || !ready) return;
     if (cfg.paused) { schedule(); return; }
     running = true; push();
-    await importSession();
     const queue = cfg.users.slice();
     const worker = async () => { while (queue.length) await checkOne(queue.shift()); };
     await Promise.all(Array.from({ length: Math.min(PARALLEL, queue.length) }, worker));
@@ -262,7 +272,7 @@ function start() {
     tray.on('click', openSettings);
     tray.on('double-click', openSettings);
     push();
-    makeChecker();
+    dropOldSignIn().finally(makeChecker);
     if (!cfg.users.length) openSettings();
   });
 }

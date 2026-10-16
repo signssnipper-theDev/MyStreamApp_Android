@@ -1,6 +1,6 @@
-// Lets the grid page ask the app to open the Tango account (sign-in) window.
+// Lets the grid page write diagnostics and ask the app to repair its session.
 const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('mgvApp', {
-  openAccount: () => ipcRenderer.send('mgv:account'),
-  log: o => ipcRenderer.send('mgv:log', o)
+  log: o => ipcRenderer.send('mgv:log', o),
+  resetSession: stage => ipcRenderer.send('mgv:reset-session', stage)
 });
