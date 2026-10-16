@@ -129,13 +129,22 @@ ipcMain.on('mgv:reset-session', async (e, stage) => {
   const n = await resetTangoCookies(session.defaultSession, stage === 2 ? 2 : 1);
   diagLog({ why: 'session-reset', stage, removed: n });
   if (win && !win.isDestroyed()) win.webContents.reload();
+  setTimeout(exportSession, 20000);
 });
 
-// The app no longer signs in to the site. Any sign-in left from an earlier
-// version (and the copy that used to be shared with the alerts app) is removed
-// at start, so live checks always run as a visitor.
-async function dropOldSignIn() {
-  try { fs.unlinkSync(path.join(app.getPath('appData'), 'MultiGridView Alerts', 'tango-session.json')); } catch (e) {}
+// ---------- share the guest session with the alerts app ----------
+// The app runs the site as a guest (no account sign-in). The site renews that
+// guest session while the grid is open; a copy goes to the alerts app so its
+// live checks are accepted too. Refreshed shortly after start and every 5 minutes.
+const SHARE = path.join(app.getPath('appData'), 'MultiGridView Alerts', 'tango-session.json');
+async function exportSession() {
+  try {
+    const all = await session.defaultSession.cookies.get({});
+    const mine = all.filter(c => /(^|\.)tango\.me$/.test((c.domain || '').replace(/^\./, '')));
+    if (!mine.length) return;
+    fs.mkdirSync(path.dirname(SHARE), { recursive: true });
+    fs.writeFileSync(SHARE, JSON.stringify({ at: Date.now(), cookies: mine }));
+  } catch (e) {}
 }
 
 app.on('second-instance', (e, argv) => {
@@ -143,5 +152,5 @@ app.on('second-instance', (e, argv) => {
   if (u) return requestOpen(u);
   if (win) { if (win.isMinimized()) win.restore(); win.focus(); }
 });
-app.whenReady().then(async () => { diagLog({ start: 'grid', app: app.getVersion(), chrome: process.versions.chrome, electron: process.versions.electron, ua: app.userAgentFallback }); await dropOldSignIn(); createWindow(); requestOpen(openArg(process.argv)); });
+app.whenReady().then(async () => { diagLog({ start: 'grid', app: app.getVersion(), chrome: process.versions.chrome, electron: process.versions.electron, ua: app.userAgentFallback }); createWindow(); requestOpen(openArg(process.argv)); setTimeout(exportSession, 20000); setInterval(exportSession, 5 * 60000); });
 app.on('window-all-closed', () => app.quit());
