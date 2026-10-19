@@ -64,6 +64,7 @@
       <label class="sw">Windows notification<input type="checkbox" id="toast"></label>
       <label class="sw">Sound<input type="checkbox" id="sound"></label>
       <label class="sw">Start with Windows<input type="checkbox" id="startWithWindows"></label>
+      <label class="sw" title="The pop-up plays a small muted preview of the stream while it's on screen. Uses some data and briefly counts as a viewer.">Live preview in pop-ups<input type="checkbox" id="livePreview"></label>
     </div>
     <div class="row"><label for="minutes">Check every</label>
       <select id="minutes"><option value="1">1 minute</option><option value="2">2 minutes</option><option value="5">5 minutes</option><option value="10">10 minutes</option><option value="15">15 minutes</option></select>
@@ -88,7 +89,7 @@
     if (!dirty) {
       $('users').value = s.cfg.users.join(', ');
       $('hideNames').checked = s.cfg.hideNames; $('toast').checked = s.cfg.toast; $('sound').checked = s.cfg.sound;
-      $('startWithWindows').checked = s.startWithWindows; $('minutes').value = String(s.cfg.minutes);
+      $('startWithWindows').checked = s.startWithWindows; $('livePreview').checked = s.cfg.livePreview !== false; $('minutes').value = String(s.cfg.minutes);
     }
     $('listwrap').classList.toggle('masked', $('hideNames').checked);
     const live = s.rows.filter(r => r.live).length;
@@ -110,11 +111,11 @@
     const mins = Math.max(0, Math.round((s.nextAt - Date.now()) / 60000));
     $('next').textContent = !s.ready ? 'Connecting to Tango…' : s.running ? 'Checking now…' : s.cfg.paused ? 'Alerts are paused.' : `Next check in about ${mins < 1 ? 'a minute' : mins + ' min'}.`;
   }
-  ['users', 'hideNames', 'toast', 'sound', 'startWithWindows', 'minutes'].forEach(id => $(id).addEventListener('input', () => { dirty = true; $('listwrap').classList.toggle('masked', $('hideNames').checked); }));
+  ['users', 'hideNames', 'toast', 'sound', 'startWithWindows', 'livePreview', 'minutes'].forEach(id => $(id).addEventListener('input', () => { dirty = true; $('listwrap').classList.toggle('masked', $('hideNames').checked); }));
   $('save').onclick = async () => {
     const users = $('users').value.split(/[\s,;]+/).filter(Boolean);
     dirty = false;
-    render(await window.mgv.save({ users, hideNames: $('hideNames').checked, toast: $('toast').checked, sound: $('sound').checked, startWithWindows: $('startWithWindows').checked, minutes: +$('minutes').value }));
+    render(await window.mgv.save({ users, hideNames: $('hideNames').checked, toast: $('toast').checked, sound: $('sound').checked, startWithWindows: $('startWithWindows').checked, livePreview: $('livePreview').checked, minutes: +$('minutes').value }));
     $('saved').textContent = 'Saved. Checking now.'; setTimeout(() => $('saved').textContent = '', 3000);
   };
   $('pause').onclick = async () => render(await window.mgv.pause(!S.cfg.paused));

@@ -7,6 +7,8 @@ const { spawn } = require('child_process');
 
 const START_URL = 'https://www.tango.me/robots.txt';
 const CHECKER = fs.readFileSync(path.join(__dirname, 'checker.js'), 'utf8');
+const PREVIEW = fs.readFileSync(path.join(__dirname, 'preview.js'), 'utf8');
+const LIVE_PREVIEWS = 2;      // at most this many pop-ups play a live preview at once
 const AUMID = 'com.multigridview.alerts';
 const PARALLEL = 3;
 
@@ -27,7 +29,7 @@ if (!app.requestSingleInstanceLock()) {
 function start() {
   // ---------- settings ----------
   const CFG = path.join(app.getPath('userData'), 'alerts.json');
-  const DEF = { users: [], minutes: 2, hideNames: true, toast: true, sound: true, paused: false };
+  const DEF = { users: [], minutes: 2, hideNames: true, toast: true, sound: true, paused: false, livePreview: true };
   let cfg = { ...DEF };
   try { cfg = { ...DEF, ...JSON.parse(fs.readFileSync(CFG, 'utf8')) }; } catch (e) {}
   const save = () => { try { fs.mkdirSync(path.dirname(CFG), { recursive: true }); fs.writeFileSync(CFG, JSON.stringify(cfg, null, 2)); } catch (e) {} };
@@ -174,19 +176,51 @@ function start() {
   }
   function layoutPopups() {
     const wa = screen.getPrimaryDisplay().workArea;
-    popups.forEach((p, i) => { if (!p.isDestroyed()) p.setPosition(wa.x + wa.width - 376, wa.y + wa.height - (i + 1) * 106 - 6); });
+    let y = wa.y + wa.height - 6;
+    popups.forEach(p => { if (p.isDestroyed()) return; const h = p.getBounds().height; y -= h; p.setPosition(wa.x + wa.width - 376, y); y -= 10; });
+  }
+  // Only the newest pop-ups play their live preview; older ones keep the still picture.
+  function limitPreviews() {
+    popups.filter(p => !p.isDestroyed() && p.__live).slice(LIVE_PREVIEWS).forEach(p => {
+      p.__live = false;
+      p.webContents.executeJavaScript('window.__mgvPreviewStop && window.__mgvPreviewStop()').catch(() => {});
+    });
+  }
+  function plainPopup(p, name) {
+    p.setSize(360, 96);
+    p.loadFile(path.join(__dirname, 'alerts-popup.html'), { query: { name } });
   }
   function showPopup(name, user) {
+    const live = !!cfg.livePreview && typeof user === 'string';
     const p = new BrowserWindow({
-      width: 360, height: 96, frame: false, resizable: false, movable: false, minimizable: false, maximizable: false,
+      width: 360, height: live ? 232 : 96, frame: false, resizable: false, movable: false, minimizable: false, maximizable: false,
       alwaysOnTop: true, skipTaskbar: true, show: false, backgroundColor: '#131a26',
-      webPreferences: { preload: path.join(__dirname, 'alerts-preload.js'), contextIsolation: true, nodeIntegration: false, sandbox: true }
+      webPreferences: { preload: path.join(__dirname, live ? 'preview-preload.js' : 'alerts-preload.js'), contextIsolation: true, nodeIntegration: false, sandbox: true, backgroundThrottling: false }
     });
     p.setAlwaysOnTop(true, 'screen-saver');
     p.__user = user;
-    p.loadFile(path.join(__dirname, 'alerts-popup.html'), { query: { name } });
+    p.__live = live;
+    if (live) {
+      // A small muted live preview: the stream site's page with only the video shown.
+      const wc = p.webContents;
+      wc.setAudioMuted(true);
+      wc.setWindowOpenHandler(() => ({ action: 'deny' }));
+      wc.on('will-navigate', e => e.preventDefault());
+      let injected = false;
+      wc.on('did-finish-load', () => {
+        if (injected || !wc.getURL().startsWith(START_URL)) return;
+        injected = true;
+        wc.executeJavaScript(`window.__mgvPreview=${JSON.stringify({ user, name })};` + PREVIEW).catch(() => {});
+        if (!p.isVisible()) p.showInactive();
+      });
+      wc.on('did-fail-load', (e, code, desc, url, isMain) => { if (isMain && code !== -3 && !p.isDestroyed()) { p.__live = false; plainPopup(p, name); layoutPopups(); } });
+      p.loadURL(START_URL);
+    } else {
+      p.loadFile(path.join(__dirname, 'alerts-popup.html'), { query: { name } });
+    }
     p.once('ready-to-show', () => p.showInactive());
     popups.unshift(p);
+    limitPreviews();
     while (popups.length > 4) { const old = popups.pop(); if (!old.isDestroyed()) old.close(); }
     p.on('closed', () => { const i = popups.indexOf(p); if (i >= 0) popups.splice(i, 1); layoutPopups(); });
     layoutPopups();
@@ -232,7 +266,7 @@ function start() {
   ipcMain.handle('mgv:get', () => state());
   ipcMain.handle('mgv:save', (e, next) => {
     const users = Array.isArray(next.users) ? [...new Set(next.users.map(s => String(s).trim().replace(/^@/, '').replace(/^https?:\/\/(www\.)?tango\.me\//, '').replace(/\/.*$/, '')).filter(s => /^[\w.\-]{1,64}$/.test(s)))] : cfg.users;
-    cfg = { ...cfg, users, minutes: [1, 2, 5, 10, 15].includes(+next.minutes) ? +next.minutes : cfg.minutes, hideNames: !!next.hideNames, toast: !!next.toast, sound: !!next.sound };
+    cfg = { ...cfg, users, minutes: [1, 2, 5, 10, 15].includes(+next.minutes) ? +next.minutes : cfg.minutes, hideNames: !!next.hideNames, toast: !!next.toast, sound: !!next.sound, livePreview: next.livePreview === undefined ? cfg.livePreview : !!next.livePreview };
     for (const u of Object.keys(status)) if (!users.includes(u)) delete status[u];
     save();
     if (process.platform === 'win32' && typeof next.startWithWindows === 'boolean') app.setLoginItemSettings({ openAtLogin: next.startWithWindows, path: process.execPath, args: ['--alerts'] });

@@ -42,7 +42,10 @@
   css.id = 'sp-style';
   css.textContent = `
 #sp-root{--bg:#0c1018;--panel:#131a26;--raise:#172031;--line:#222c3d;--line2:#2a3549;--ink:#e3e8f2;--muted:#8d98ad;--accent:#4f7dff;--accent2:#7aa2ff;--tint:#1d2b4d;--live:#ff4d6a;--off:#4a5468;
-  position:fixed;inset:0;z-index:2147483647;background:var(--bg);color:var(--ink);font:13px/1.4 Figtree,system-ui,'Segoe UI',sans-serif;}
+  position:fixed;inset:0;z-index:2147483647;background:var(--bg);color:var(--ink);font:13px/1.4 Figtree,system-ui,'Segoe UI',sans-serif;
+  /* Room for a phone's notch, rounded corners and gesture bar (the phone app also passes these in). */
+  --sit:max(env(safe-area-inset-top,0px),var(--mgv-it,0px));--sib:max(env(safe-area-inset-bottom,0px),var(--mgv-ib,0px));
+  --sil:max(env(safe-area-inset-left,0px),var(--mgv-il,0px));--sir:max(env(safe-area-inset-right,0px),var(--mgv-ir,0px));}
 html,body{background:#0c1018 !important;overflow:hidden !important;}
 body > *:not(#sp-root){display:none !important;}
 #sp-root button{font:600 13px Figtree,system-ui,sans-serif;color:var(--ink);background:var(--raise);border:1px solid var(--line2);border-radius:10px;padding:7px 13px;cursor:pointer;white-space:nowrap;}
@@ -50,14 +53,20 @@ body > *:not(#sp-root){display:none !important;}
 #sp-root button:focus-visible{outline:2px solid var(--accent2);outline-offset:2px;}
 #sp-root button.on{background:var(--tint);border-color:var(--accent);color:#cfe0ff;}
 #sp-root button.primary{background:var(--accent);border-color:var(--accent);color:#fff;}
-#sp-top{position:absolute;top:10px;left:12px;right:12px;height:32px;display:flex;align-items:center;gap:10px;}
+#sp-top{position:absolute;top:calc(10px + var(--sit));left:calc(12px + var(--sil));right:calc(12px + var(--sir));height:32px;display:flex;align-items:center;gap:10px;}
+#sp-tray{display:flex;gap:6px;min-width:0;overflow-x:auto;scrollbar-width:none;}
+#sp-tray::-webkit-scrollbar{display:none;}
+#sp-root .sp-chip{display:flex;align-items:center;gap:6px;padding:4px 10px;border-radius:999px;font-weight:500;font-size:12px;flex:none;}
+.sp-chip .an{display:none;} html.sp-anon .sp-chip .nm{display:none;} html.sp-anon .sp-chip .an{display:inline;}
+.sp-chip.live .sp-dot{background:var(--live);box-shadow:0 0 0 3px rgba(255,77,106,.2);}
 #sp-brand{font:700 15px Sora,system-ui,sans-serif;letter-spacing:.02em;display:flex;align-items:center;gap:8px;}
 #sp-brand i{width:11px;height:11px;border-radius:3px;background:var(--accent);display:block;}
-#sp-stats{margin-left:auto;background:var(--panel);border:1px solid var(--line);border-radius:999px;padding:6px 14px;font-variant-numeric:tabular-nums;color:var(--muted);}
+#sp-stats{margin-left:auto;flex:none;background:var(--panel);border:1px solid var(--line);border-radius:999px;padding:6px 14px;font-variant-numeric:tabular-nums;color:var(--muted);}
 #sp-stats b{color:var(--ink);font-family:Sora,system-ui,sans-serif;}
-#sp-grid{position:absolute;top:52px;left:10px;right:10px;bottom:var(--gridb,92px);display:grid;gap:10px;min-height:0;justify-content:center;align-content:center;}
+#sp-grid{position:absolute;top:calc(52px + var(--sit));left:calc(10px + var(--sil));right:calc(10px + var(--sir));bottom:var(--gridb,92px);display:grid;gap:10px;min-height:0;justify-content:center;align-content:center;}
 .sp-cell{position:relative;display:flex;flex-direction:column;background:var(--panel);border:1px solid var(--line);border-radius:14px;overflow:hidden;min-height:0;min-width:0;}
-.sp-head{display:flex;align-items:center;gap:6px;padding:6px 8px 6px 10px;}
+.sp-head{display:flex;align-items:center;gap:6px;padding:6px 8px 6px 10px;cursor:grab;touch-action:none;user-select:none;}
+.sp-head.grabbing{cursor:grabbing;}
 .sp-dot{width:8px;height:8px;border-radius:50%;background:var(--off);flex:none;}
 .sp-cell.live .sp-dot{background:var(--live);box-shadow:0 0 0 3px rgba(255,77,106,.2);}
 .sp-name{flex:1;min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;font-weight:600;}
@@ -86,17 +95,31 @@ html.sp-anon .sp-name .nm{display:none;} html.sp-anon .sp-name .an{display:inlin
 @media (prefers-reduced-motion:reduce){.sp-spin{animation:none;}}
 .sp-cell.sp-flash{border-color:var(--accent);box-shadow:0 0 0 3px rgba(79,125,255,.45);transition:box-shadow .3s;}
 .sp-cell.hidden iframe{opacity:0 !important;pointer-events:none;}
+.sp-cell.mini{display:none !important;}
+.sp-cell.dragging{opacity:.6;z-index:9;box-shadow:0 14px 34px rgba(0,0,0,.55);}
+.sp-cell.drop-target{border-color:var(--accent);box-shadow:0 0 0 3px rgba(79,125,255,.45);}
+.sp-menu{position:absolute;top:42px;right:6px;z-index:8;width:240px;max-width:calc(100% - 12px);max-height:calc(100% - 50px);overflow-y:auto;box-sizing:border-box;background:var(--panel);border:1px solid var(--line2);border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.5);padding:6px;display:none;flex-direction:column;gap:2px;cursor:default;}
+.sp-cell.menu-open .sp-menu{display:flex;}
+#sp-root .sp-menu .mi{background:none;border:0;border-radius:8px;text-align:left;padding:8px 10px;font-weight:500;}
+#sp-root .sp-menu .mi:hover,#sp-root .sp-menu .mi:focus-visible{background:var(--raise);}
+#sp-root .sp-menu .mi.danger{color:#ff9aa9;}
+.sp-menu .pic{display:none;flex-direction:column;gap:7px;padding:4px 10px 6px;}
+.sp-menu.pic-open .pic{display:flex;}
+.sp-menu label{display:grid;grid-template-columns:72px 1fr 40px;align-items:center;gap:8px;font-size:12px;color:var(--muted);}
+.sp-menu input[type=range]{width:100%;min-width:0;margin:0;accent-color:var(--accent);}
+.sp-menu .val{text-align:right;font-variant-numeric:tabular-nums;color:var(--ink);}
+.sp-menu hr{border:0;border-top:1px solid var(--line2);margin:4px 2px;width:auto;}
 html.sp-allhide #sp-grid{opacity:0 !important;pointer-events:none !important;}
-#sp-dock{position:absolute;left:12px;right:12px;bottom:14px;width:fit-content;margin:0 auto;display:flex;flex-wrap:wrap;align-items:stretch;background:var(--panel);border:1px solid var(--line2);border-radius:18px;box-shadow:0 10px 30px rgba(0,0,0,.45);padding:8px 4px;box-sizing:border-box;}
+#sp-dock{position:absolute;left:calc(12px + var(--sil));right:calc(12px + var(--sir));bottom:calc(14px + var(--sib));width:fit-content;margin:0 auto;display:flex;flex-wrap:wrap;align-items:stretch;background:var(--panel);border:1px solid var(--line2);border-radius:18px;box-shadow:0 10px 30px rgba(0,0,0,.45);padding:8px 4px;box-sizing:border-box;}
 .sp-sec{display:flex;flex-direction:column;gap:5px;padding:0 12px;}
 .sp-sec + .sp-sec{border-left:1px solid var(--line2);}
 .sp-sec h2{margin:0;font:700 10px Sora,system-ui,sans-serif;letter-spacing:.16em;color:var(--accent2);}
 .sp-row{display:flex;gap:6px;}
-#sp-root #sp-dockmin{position:absolute;right:-10px;top:-10px;width:24px;height:24px;padding:0;border-radius:50%;display:grid;place-items:center;font-size:12px;}
+#sp-root #sp-dockmin{align-self:center;flex:none;width:30px;height:30px;padding:0;margin:0 6px 0 2px;border-radius:50%;display:grid;place-items:center;font-size:15px;line-height:1;}
 html.sp-docksmall #sp-dock .sp-sec{display:none;}
-html.sp-docksmall #sp-dock{padding:6px;}
+html.sp-docksmall #sp-dock{left:auto;right:calc(14px + var(--sir));margin:0;padding:5px;border-radius:999px;}
 #sp-root #sp-dockopen{display:none;}
-html.sp-docksmall #sp-root #sp-dockopen{display:block;}
+html.sp-docksmall #sp-root #sp-dockopen{display:block;border-radius:999px;}
 html.sp-docksmall #sp-root #sp-dockmin{display:none;}
 #sp-pop{position:absolute;left:12px;right:12px;bottom:var(--dockh,84px);margin:0 auto;width:min(560px,calc(100% - 24px));background:var(--panel);border:1px solid var(--line2);border-radius:16px;box-shadow:0 10px 30px rgba(0,0,0,.5);padding:14px;display:none;flex-direction:column;gap:10px;box-sizing:border-box;}
 #sp-pop.open{display:flex;}
@@ -115,8 +138,28 @@ html.sp-anon .sp-chat .ln b{display:none;}
 @container (max-width:230px){.sp-st,.sp-vc{display:none;}.sp-head{gap:3px;padding:5px 5px 5px 8px;}#sp-root .sp-ic{width:24px;height:24px;border-radius:6px;}}
 #sp-grid.focus .sp-cell:not(.focused){display:none;}
 #sp-root .sp-cell.focused .sp-max{background:var(--tint);border-color:var(--accent);color:#cfe0ff;}
-.sp-empty{position:absolute;inset:0;display:grid;place-items:center;color:var(--muted);text-align:center;font-size:14px;}`;
+.sp-empty{position:absolute;inset:0;display:grid;place-items:center;color:var(--muted);text-align:center;font-size:14px;}
+/* Narrower windows and phones: the controls become one full-width row that scrolls
+   sideways (no wrapping), with the shrink button always visible at its end. */
+@media (max-width:1100px){
+  #sp-dock{left:calc(8px + var(--sil));right:calc(8px + var(--sir));bottom:calc(8px + var(--sib));width:auto;margin:0;flex-wrap:nowrap;overflow-x:auto;overscroll-behavior:contain;scrollbar-width:none;padding:8px 0 8px 2px;border-radius:16px;}
+  #sp-dock::-webkit-scrollbar{display:none;}
+  .sp-sec{flex:none;padding:0 10px;}
+  #sp-root #sp-dockmin{position:sticky;right:0;margin:0 0 0 auto;width:40px;height:100%;min-height:36px;border-radius:0 12px 12px 0;border:0;border-left:1px solid var(--line2);background:var(--panel);}
+  html.sp-docksmall #sp-dock{left:auto;right:calc(10px + var(--sir));bottom:calc(10px + var(--sib));padding:4px;border-radius:999px;overflow:visible;}
+  #sp-pop{width:auto;left:calc(8px + var(--sil));right:calc(8px + var(--sir));}
+}
+@media (max-width:560px){
+  #sp-brand{font-size:13px;} #sp-stats{padding:4px 10px;font-size:12px;}
+  #sp-top{gap:8px;}
+}
+@media (pointer:coarse){
+  #sp-root button{min-height:36px;}
+  #sp-root .sp-ic{width:34px;height:32px;}
+  #sp-root .sp-menu .mi{padding:11px 12px;}
+}`;
   D.head.appendChild(css);
+  if (!D.querySelector('meta[name="viewport"]')) { const vm = D.createElement('meta'); vm.name = 'viewport'; vm.content = 'width=device-width, initial-scale=1, viewport-fit=cover'; D.head.appendChild(vm); }
 
   const ICON = {
     mute: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M11 5 6 9H3v6h3l5 4z"/><path d="m22 9-6 6M16 9l6 6"/></svg>',
@@ -125,14 +168,15 @@ html.sp-anon .sp-chat .ln b{display:none;}
     max: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>',
     unmax: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5"/></svg>',
     eyeOff: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 3l18 18"/><path d="M10.6 6.1A10 10 0 0 1 12 6c6 0 9.5 6 9.5 6a17 17 0 0 1-3 3.6M6.3 7.6A17 17 0 0 0 2.5 12S6 18 12 18a9 9 0 0 0 4-.9"/></svg>',
-    x: '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>'
+    x: '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>',
+    more: '<svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.9"/><circle cx="12" cy="12" r="1.9"/><circle cx="19" cy="12" r="1.9"/></svg>'
   };
 
   // ---------- structure ----------
   const root = D.createElement('div');
   root.id = 'sp-root';
   root.innerHTML = `
-<div id="sp-top"><div id="sp-brand"><i></i>SystemProfiles</div><div id="sp-stats"></div></div>
+<div id="sp-top"><div id="sp-brand"><i></i>SystemProfiles</div><div id="sp-tray" aria-label="Minimized streams"></div><div id="sp-stats"></div></div>
 <div id="sp-grid"></div>
 <div id="sp-pop" role="dialog" aria-label="Broadcaster list">
   <h2>BROADCASTERS</h2>
@@ -147,12 +191,12 @@ html.sp-anon .sp-chat .ln b{display:none;}
   <div class="sp-sec"><h2>PICTURE</h2><div class="sp-row"><button id="sp-fx-sharp"></button><button id="sp-fx-sat"></button><button id="sp-fx-tone"></button></div></div>
   <div class="sp-sec"><h2>CHAT</h2><div class="sp-row"><button id="sp-chat-btn"></button></div></div>
   ${window.mgvApp && window.mgvApp.openAlerts ? '<div class="sp-sec"><h2>ALERTS</h2><div class="sp-row"><button id="sp-alerts">Alerts</button></div></div>' : ''}
-  <button id="sp-dockmin" title="Shrink controls" aria-label="Shrink controls">–</button>
+  <button id="sp-dockmin" title="Shrink controls" aria-label="Shrink controls">&#x2013;</button>
   <button id="sp-dockopen">Controls</button>
 </div>`;
   D.body.appendChild(root);
   const $ = id => D.getElementById(id);
-  const grid = $('sp-grid'), input = $('sp-in'), pop = $('sp-pop');
+  const grid = $('sp-grid'), input = $('sp-in'), pop = $('sp-pop'), tray = $('sp-tray');
   const parse = s => s.split(/[\s,;]+/).map(u => u.trim().replace(/^@/, '').replace(/^https?:\/\/(www\.)?tango\.me\//, '').replace(/\/.*$/, '')).filter(Boolean);
 
   // ---------- cells ----------
@@ -177,6 +221,21 @@ html.sp-anon .sp-chat .ln b{display:none;}
       return true;
     } catch (e) { return false; }
   }
+  // ---------- per-cell picture (contrast / brightness / saturation) ----------
+  // Saved per broadcaster, on top of the PICTURE settings for all streams.
+  const PKEY = 'sp_pic';
+  let pics = {}; try { pics = JSON.parse(store.get(PKEY) || '{}') || {}; } catch (e) { pics = {}; }
+  const picFor = u => { const p = pics[String(u || '').toLowerCase()] || {}; return { c: +p.c || 100, b: +p.b || 100, s: p.s === 0 ? 0 : (+p.s || 100) }; };
+  function picSet(u, k, v) {
+    const key = String(u || '').toLowerCase(), p = picFor(u); p[k] = v;
+    if (p.c === 100 && p.b === 100 && p.s === 100) delete pics[key]; else pics[key] = p;
+    store.set(PKEY, JSON.stringify(pics));
+  }
+  // ---------- minimized streams ----------
+  const MKEY = 'sp_mini';
+  let minis = new Set(); try { minis = new Set((JSON.parse(store.get(MKEY) || '[]') || []).map(x => String(x).toLowerCase())); } catch (e) {}
+  const saveMinis = () => store.set(MKEY, JSON.stringify([...minis]));
+
   // ---------- per-cell zoom ----------
   // Wheel or pinch to zoom, drag to pan, double-click / double-tap or the badge to reset.
   // Saved per broadcaster. Applied inside the cell's Tango frame to the video only.
@@ -324,25 +383,48 @@ html.sp-anon .sp-chat .ln b{display:none;}
   function cell(user, idx) {
     const el = D.createElement('div');
     el.className = 'sp-cell';
+    el.dataset.user = user;
+    el.style.order = idx;
+    el.__t = [];
     el.innerHTML = `<div class="sp-head"><span class="sp-dot"></span><span class="sp-name"><span class="nm"></span><span class="an"></span> <span class="sp-st">· checking…</span></span><span class="sp-vc"></span>
       <button class="sp-ic sp-zm" title="Reset zoom" aria-label="Reset zoom">1.0×</button>
       <button class="sp-ic sp-max" title="Show this stream large" aria-label="Show this stream large">${ICON.max}</button>
       <button class="sp-ic sp-snd" title="Sound on/off" aria-label="Sound on/off">${ICON.mute}</button>
-      <button class="sp-ic sp-hide" title="Hide this stream" aria-label="Hide this stream">${ICON.eyeOff}</button>
-      <button class="sp-ic sp-x" title="Remove" aria-label="Remove">${ICON.x}</button></div>
+      <button class="sp-ic sp-more" title="More: picture, minimize, move, remove" aria-label="More options for this stream" aria-haspopup="menu">${ICON.more}</button></div>
+      <div class="sp-menu" role="menu" aria-label="Stream options">
+        <button class="mi" role="menuitem" data-a="pic">Picture…</button>
+        <div class="pic">
+          <label>Contrast<input type="range" min="50" max="200" step="5" data-k="c" aria-label="Contrast"><span class="val"></span></label>
+          <label>Brightness<input type="range" min="50" max="150" step="5" data-k="b" aria-label="Brightness"><span class="val"></span></label>
+          <label>Saturation<input type="range" min="0" max="200" step="5" data-k="s" aria-label="Saturation"><span class="val"></span></label>
+          <button class="mi" data-a="picreset">Reset picture</button>
+        </div>
+        <hr>
+        <button class="mi" role="menuitem" data-a="mini">Minimize</button>
+        <button class="mi" role="menuitem" data-a="hide">Hide video</button>
+        <button class="mi" role="menuitem" data-a="earlier">Move earlier</button>
+        <button class="mi" role="menuitem" data-a="later">Move later</button>
+        <hr>
+        <button class="mi danger" role="menuitem" data-a="remove">Remove from grid</button>
+      </div>
       <div class="sp-body"><div class="sp-wait"><div class="sp-spin"></div><div class="sp-msg">Connecting…</div></div><iframe allow="autoplay; fullscreen"></iframe><div class="sp-zoomer" title="Scroll or pinch to zoom, drag to move, double-click to reset"></div></div>`;
-    const f = el.querySelector('iframe'), nm = el.querySelector('.nm'), st = el.querySelector('.sp-st'), hide = el.querySelector('.sp-hide');
+    const f = el.querySelector('iframe'), nm = el.querySelector('.nm'), st = el.querySelector('.sp-st');
     nm.textContent = '@' + user;
     el.querySelector('.an').textContent = 'Cell ' + (idx + 1);
-    openUser(f, user);
+    if (minis.has(user.toLowerCase())) {
+      el.classList.add('mini'); f.dataset.user = user; addChip(el);
+      lookup(user).then(info => { if (info) { el.dataset.lh = info.live ? '1' : ''; if (el.__chip) el.__chip.classList.toggle('live', !!info.live); } });
+    }
+    else openUser(f, user);
     wireZoom(f, el, user); applyZoom(f, el, user);
+    wireMenu(el, f, user);
+    wireDrag(el);
     el.querySelector('.sp-max').onclick = () => setFocus(el);
-    hide.onclick = () => { const h = el.classList.toggle('hidden'); hide.innerHTML = h ? ICON.eye : ICON.eyeOff; hide.title = h ? 'Show this stream' : 'Hide this stream'; hide.classList.toggle('on', h); };
-    el.querySelector('.sp-x').onclick = () => { const list = parse(input.value); list.splice(idx, 1); input.value = list.join(', '); build(list); };
     const url = () => { try { return f.contentWindow.location.href; } catch (e) { return ''; } };
     const disp = () => { try { const t = f.contentDocument.title; return (t.match(/^(.*?) (Live Stream - Watch|\(@)/) || [])[1] || (f.contentDocument.querySelector('h1')?.textContent || '').trim().slice(0, 40); } catch (e) { return ''; } };
     const msg = el.querySelector('.sp-msg');
     let checks = 0;
+    el.__resetChecks = () => { checks = 0; el.classList.remove('off'); msg.textContent = 'Connecting…'; };
     const check = () => {
       checks++;
       const live = url().includes('/stream/') || (() => { try { return / Live Stream - Watch/.test(f.contentDocument.title || ''); } catch (e) { return false; } })();
@@ -362,29 +444,189 @@ html.sp-anon .sp-chat .ln b{display:none;}
       st.textContent = live ? '· LIVE' : off ? '· not live' : '· checking…';
     };
     // Fast checks while the cell is getting ready, then every 4 seconds.
-    window.__spTimers.push(setInterval(() => { const busy = !el.classList.contains('vready') && !el.classList.contains('off'); if (busy || checks % 5 === 0) check(); else checks++; }, 800));
+    const every = (fn, ms) => { const id = setInterval(fn, ms); el.__t.push(id); window.__spTimers.push(id); };
+    every(() => { if (el.classList.contains('mini')) return; const busy = !el.classList.contains('vready') && !el.classList.contains('off'); if (busy || checks % 5 === 0) check(); else checks++; }, 800);
     // Every minute: if this cell isn't on a stream, ask the lookup and open the stream
     // when it starts (a full reload every 5th minute as a fallback). If it is on a
     // stream that has ended, go back to the profile.
     let ticks = 0;
-    setTimeout(() => diag(f, user, el, 'start+30s'), 30000);
-    window.__spTimers.push(setInterval(async () => {
+    setTimeout(() => { if (el.isConnected && !el.classList.contains('mini')) diag(f, user, el, 'start+30s'); }, 30000);
+    every(async () => {
       ticks++;
+      if (el.classList.contains('mini')) {
+        // Minimized: the stream is unloaded; just keep its live dot up to date.
+        const info = await lookup(user);
+        if (info) { el.dataset.lh = info.live ? '1' : ''; if (el.__chip) el.__chip.classList.toggle('live', !!info.live); }
+        return;
+      }
       diag(f, user, el, 'minute');
       const onStream = url().includes('/stream/');
       const info = await lookup(user);
       if (!onStream) { if (!info || info.live || ticks % 5 === 0) openUser(f, user); }
       else if (info && !info.live) openUser(f, user);
-    }, 60000));
+    }, 60000);
     return el;
+  }
+
+  // ---------- order (drag to rearrange, Move earlier/later) ----------
+  // Cells never move in the page (moving a stream's frame would reload it); their
+  // CSS order changes instead, and the list is saved in that order.
+  const cellsInOrder = () => [...grid.querySelectorAll('.sp-cell')].sort((a, b) => (+a.style.order || 0) - (+b.style.order || 0));
+  function relabel() {
+    cellsInOrder().forEach((c, i) => { c.querySelector('.an').textContent = 'Cell ' + (i + 1); if (c.__chip) c.__chip.querySelector('.an').textContent = 'Cell ' + (i + 1); });
+  }
+  function commitOrder(arr) {
+    arr.forEach((c, i) => { c.style.order = i; });
+    const list = arr.map(c => c.dataset.user);
+    input.value = list.join(', ');
+    store.set(KEY, JSON.stringify(list));
+    relabel(); layout();
+  }
+  function moveBy(el, d) {
+    const arr = cellsInOrder(), i = arr.indexOf(el), j = Math.max(0, Math.min(arr.length - 1, i + d));
+    if (i < 0 || i === j) return;
+    arr.splice(i, 1); arr.splice(j, 0, el); commitOrder(arr);
+  }
+  function cellAt(x, y, self) {
+    for (const c of grid.querySelectorAll('.sp-cell:not(.mini)')) {
+      if (c === self) continue;
+      const r = c.getBoundingClientRect();
+      if (x >= r.left && x <= r.right && y >= r.top && y <= r.bottom) return c;
+    }
+    return null;
+  }
+  // Drag a cell by its header: with a mouse, just drag; on a touch screen, press
+  // and hold for a moment, then drag. Drop it on another cell to take its place.
+  function wireDrag(el) {
+    const head = el.querySelector('.sp-head');
+    let pid = null, sx = 0, sy = 0, active = false, holdT = 0, target = null;
+    const start = () => { if (grid.classList.contains('focus')) return; active = true; el.classList.add('dragging'); head.classList.add('grabbing'); closeMenus(); };
+    const end = drop => {
+      clearTimeout(holdT);
+      if (pid !== null) { try { head.releasePointerCapture(pid); } catch (e) {} }
+      pid = null;
+      if (active) {
+        el.classList.remove('dragging'); head.classList.remove('grabbing'); el.style.transform = '';
+        if (drop && target) { const arr = cellsInOrder(); const from = arr.indexOf(el), to = arr.indexOf(target); arr.splice(from, 1); arr.splice(to, 0, el); commitOrder(arr); }
+      }
+      if (target) target.classList.remove('drop-target');
+      target = null; active = false;
+    };
+    head.addEventListener('pointerdown', e => {
+      if (e.button !== 0 || e.target.closest('button')) return;
+      pid = e.pointerId; sx = e.clientX; sy = e.clientY; active = false;
+      try { head.setPointerCapture(pid); } catch (err) {}
+      if (e.pointerType !== 'mouse') holdT = setTimeout(start, 380);
+    });
+    head.addEventListener('pointermove', e => {
+      if (e.pointerId !== pid) return;
+      const dx = e.clientX - sx, dy = e.clientY - sy, far = Math.hypot(dx, dy);
+      if (!active) {
+        if (e.pointerType === 'mouse') { if (far > 6) start(); }
+        else if (far > 12) end(false);   // moved before the hold: not a drag
+        if (!active) return;
+      }
+      el.style.transform = `translate(${dx}px,${dy}px)`;
+      const over = cellAt(e.clientX, e.clientY, el);
+      if (over !== target) { if (target) target.classList.remove('drop-target'); target = over; if (target) target.classList.add('drop-target'); }
+    });
+    head.addEventListener('pointerup', e => { if (e.pointerId === pid) end(true); });
+    head.addEventListener('pointercancel', e => { if (e.pointerId === pid) end(false); });
+    head.addEventListener('lostpointercapture', e => { if (e.pointerId === pid) end(false); });
+  }
+
+  // ---------- per-cell menu ----------
+  function closeMenus(except) {
+    grid.querySelectorAll('.sp-cell.menu-open').forEach(c => { if (c !== except) { c.classList.remove('menu-open'); const b = c.querySelector('.sp-more'); b.classList.remove('on'); b.setAttribute('aria-expanded', 'false'); } });
+  }
+  D.addEventListener('pointerdown', e => { if (!e.target.closest('.sp-menu, .sp-more')) closeMenus(); }, true);
+  D.addEventListener('keydown', e => { if (e.key === 'Escape') closeMenus(); });
+  function wireMenu(el, f, user) {
+    const more = el.querySelector('.sp-more'), menu = el.querySelector('.sp-menu');
+    const hideItem = menu.querySelector('[data-a="hide"]');
+    const showPic = () => menu.querySelectorAll('input[type=range]').forEach(r => { const v = picFor(user)[r.dataset.k]; r.value = v; r.nextElementSibling.textContent = v + '%'; });
+    more.setAttribute('aria-expanded', 'false');
+    more.onclick = () => {
+      const open = !el.classList.contains('menu-open');
+      closeMenus(el);
+      el.classList.toggle('menu-open', open); more.classList.toggle('on', open); more.setAttribute('aria-expanded', String(open));
+      if (open) { showPic(); hideItem.textContent = el.classList.contains('hidden') ? 'Show video' : 'Hide video'; const first = menu.querySelector('.mi'); if (first) first.focus(); }
+    };
+    menu.querySelectorAll('input[type=range]').forEach(r => r.addEventListener('input', () => {
+      picSet(user, r.dataset.k, +r.value); r.nextElementSibling.textContent = r.value + '%'; apply(f);
+    }));
+    menu.addEventListener('click', e => {
+      const a = e.target.closest('[data-a]'); if (!a) return;
+      const act = a.dataset.a;
+      if (act === 'pic') { menu.classList.toggle('pic-open'); showPic(); return; }
+      if (act === 'picreset') { ['c', 'b', 's'].forEach(k => picSet(user, k, 100)); showPic(); apply(f); return; }
+      closeMenus();
+      if (act === 'hide') el.classList.toggle('hidden');
+      else if (act === 'mini') minimize(el);
+      else if (act === 'earlier') moveBy(el, -1);
+      else if (act === 'later') moveBy(el, 1);
+      else if (act === 'remove') removeCell(el);
+    });
+  }
+
+  // ---------- minimize / restore / remove ----------
+  // A minimized stream is unloaded (no data, not counted as a viewer) and shown as a
+  // name at the top; its live dot stays current. Clicking the name reconnects it.
+  function unload(el) {
+    const f = el.querySelector('iframe');
+    clearInterval(f.__spNav); clearTimeout(f.__spReadyT); f.__spReadyT = 0; f.onload = null;
+    try { f.src = 'about:blank'; } catch (e) {}
+    el.classList.remove('vready', 'live', 'off', 'menu-open');
+  }
+  function addChip(el) {
+    if (el.__chip) return;
+    const c = D.createElement('button');
+    c.className = 'sp-chip'; c.title = 'Bring this stream back';
+    c.innerHTML = '<span class="sp-dot"></span><span class="nm"></span><span class="an"></span>';
+    c.querySelector('.nm').textContent = '@' + el.dataset.user;
+    c.onclick = () => restore(el);
+    el.__chip = c; tray.appendChild(c);
+  }
+  function minimize(el) {
+    if (el.classList.contains('focused')) setFocus(null);
+    el.dataset.lh = el.classList.contains('live') ? '1' : '';
+    unload(el);
+    el.classList.add('mini');
+    minis.add(el.dataset.user.toLowerCase()); saveMinis();
+    addChip(el); if (el.dataset.lh) el.__chip.classList.add('live');
+    relabel(); layout();
+  }
+  function restore(el) {
+    el.classList.remove('mini');
+    minis.delete(el.dataset.user.toLowerCase()); saveMinis();
+    if (el.__chip) { el.__chip.remove(); el.__chip = null; }
+    if (el.__resetChecks) el.__resetChecks();
+    openUser(el.querySelector('iframe'), el.dataset.user);
+    layout(); requestAnimationFrame(() => layout()); flash(el);
+  }
+  function removeCell(el) {
+    (el.__t || []).forEach(clearInterval);
+    unload(el);
+    if (el.__chip) el.__chip.remove();
+    if (el.classList.contains('focused')) grid.classList.remove('focus');
+    el.remove();
+    minis.delete(el.dataset.user.toLowerCase()); saveMinis();
+    const rest = cellsInOrder();
+    commitOrder(rest);
+    if (!rest.length) build([]);
   }
   // Size every cell to the stream's own shape (9:16) so there is no empty space
   // around the video, and centre the grid. In focus mode one cell fills the area.
-  function layout(n) {
+  function layout() {
+    const all = grid.querySelectorAll('.sp-cell').length;
+    let n = grid.querySelectorAll('.sp-cell:not(.mini)').length;
+    let hint = grid.querySelector('.sp-allmini');
+    if (all && !n) { if (!hint) { hint = D.createElement('div'); hint.className = 'sp-empty sp-allmini'; hint.textContent = 'All streams are minimized. Click a name at the top to bring one back.'; grid.appendChild(hint); } }
+    else if (hint) hint.remove();
     if (grid.classList.contains('focus')) n = 1;
     if (!n) return;
     const W = grid.clientWidth || innerWidth - 20, Hh = grid.clientHeight || innerHeight - 150;
-    const head = (grid.querySelector('.sp-cell:not([style*="display: none"]) .sp-head') || {}).offsetHeight || 40;
+    const head = (grid.querySelector('.sp-cell:not(.mini) .sp-head') || {}).offsetHeight || 40;
     const gap = 10, padX = 14, padY = head + 8;   // borders + side margins / header + bottom margin
     let best = 1, bestW = 0;
     for (let cols = 1; cols <= n; cols++) {
@@ -410,12 +652,14 @@ html.sp-anon .sp-chat .ln b{display:none;}
   function build(list) {
     (window.__spTimers || []).forEach(clearInterval); window.__spTimers = [];
     store.set(KEY, JSON.stringify(list));
+    tray.textContent = '';
     grid.innerHTML = '';
     if (!list.length) { grid.innerHTML = '<div class="sp-empty">No broadcasters yet.<br>Click Edit list to add some.</div>'; grid.style.gridTemplateColumns = '1fr'; return; }
     grid.classList.remove('focus');
     layout(list.length);
     list.forEach((u, i) => grid.appendChild(cell(u, i)));
-    requestAnimationFrame(() => layout(list.length));
+    relabel(); layout();
+    requestAnimationFrame(() => layout());
   }
   // Add one broadcaster to the grid that is already running (or point at their cell
   // if they're already in it). Used when an alert's "Open in MultiGridView" is clicked.
@@ -427,18 +671,14 @@ html.sp-anon .sp-chat .ln b{display:none;}
   window.__spAddUser = raw => {
     const u = parse(String(raw || ''))[0];
     if (!u) return false;
-    const list = parse(input.value);
-    const at = list.findIndex(x => x.toLowerCase() === u.toLowerCase());
     if (grid.classList.contains('focus')) setFocus(null);
-    if (at >= 0) { const el = grid.querySelectorAll('.sp-cell')[at]; if (el) flash(el); return true; }
-    list.push(u);
-    input.value = list.join(', ');
-    store.set(KEY, JSON.stringify(list));
-    grid.querySelector('.sp-empty')?.remove();
-    const el = cell(u, list.length - 1);
+    const have = cellsInOrder().find(c => c.dataset.user.toLowerCase() === u.toLowerCase());
+    if (have) { if (have.classList.contains('mini')) restore(have); else flash(have); return true; }
+    grid.querySelector('.sp-empty:not(.sp-allmini)')?.remove();
+    const el = cell(u, grid.querySelectorAll('.sp-cell').length);
     grid.appendChild(el);
-    layout(list.length);
-    requestAnimationFrame(() => layout(list.length));
+    commitOrder(cellsInOrder());
+    requestAnimationFrame(() => layout());
     flash(el);
     return true;
   };
@@ -446,10 +686,9 @@ html.sp-anon .sp-chat .ln b{display:none;}
   D.addEventListener('keydown', e => { if (e.key === 'Escape' && grid.classList.contains('focus') && !D.fullscreenElement) setFocus(null); });
   const dock = $('sp-dock');
   const fitDock = () => {
-    const h = dock.offsetHeight + 14;
-    const small = H.classList.contains('sp-docksmall');
-    root.style.setProperty('--gridb', (small ? h + 10 : h + 12) + 'px');
-    root.style.setProperty('--dockh', (h + 10) + 'px');
+    const h = dock.offsetHeight + (parseFloat(getComputedStyle(dock).bottom) || 14);
+    root.style.setProperty('--gridb', (h + 10) + 'px');
+    root.style.setProperty('--dockh', (h + 8) + 'px');
     const n = grid.querySelectorAll('.sp-cell').length; if (n) layout(n);
   };
   try { new ResizeObserver(fitDock).observe(dock); } catch (e) {}
@@ -512,7 +751,9 @@ html.sp-anon .sp-chat .ln b{display:none;}
       const useSvg = a > 0 || cur.tone !== 'Neutral';
       let st = d.getElementById('sp-fx-style');
       if (!st) { st = d.createElement('style'); st.id = 'sp-fx-style'; d.head.appendChild(st); }
-      const parts = (useSvg ? 'url(#sp-fx) ' : '') + (cur.sat !== 'Natural' ? 'saturate(' + OPT.sat.val[cur.sat] + ')' : '');
+      const pc = picFor(f.dataset.user);
+      const mine = (pc.c !== 100 ? ' contrast(' + pc.c / 100 + ')' : '') + (pc.b !== 100 ? ' brightness(' + pc.b / 100 + ')' : '') + (pc.s !== 100 ? ' saturate(' + pc.s / 100 + ')' : '');
+      const parts = (useSvg ? 'url(#sp-fx) ' : '') + (cur.sat !== 'Natural' ? 'saturate(' + OPT.sat.val[cur.sat] + ')' : '') + mine;
       const want = parts.trim() ? `html body [data-sp-v]{filter:${parts.trim()} !important;}` : '';
       if (st.textContent !== want) st.textContent = want;
     } catch (e) {}
@@ -587,7 +828,7 @@ html.sp-anon .sp-chat .ln b{display:none;}
       all++;
       let v = null;
       try { if (c.classList.contains('live')) { const e = c.querySelector('iframe').contentDocument.querySelector('[data-testid=viewers]'); v = e ? num(e.textContent) : null; } } catch (e) {}
-      if (c.classList.contains('live')) live++;
+      if (c.classList.contains('mini') ? c.dataset.lh === '1' : c.classList.contains('live')) live++;
       if (v != null) tot += v;
       const vc = c.querySelector('.sp-vc'); if (vc) vc.textContent = v != null ? fmt(v) + ' watching' : '';
     });

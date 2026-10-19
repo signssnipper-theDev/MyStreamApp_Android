@@ -36,17 +36,30 @@ public class GridActivity extends Activity {
     // A broadcaster handed over by a go-live notification, added once the grid runs.
     private final java.util.ArrayList<String> pendingOpen = new java.util.ArrayList<>();
     private boolean gridReady = false;
+    // Space the grid's controls keep clear of: the notch/camera cutout, the system bars
+    // when shown, and the gesture bar. In CSS pixels (left, top, right, bottom).
+    private final int[] safe = new int[4];
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        // Use the whole screen, including beside a notch in landscape; the grid keeps its
+        // controls out of the cutout using the sizes passed in below.
+        if (Build.VERSION.SDK_INT >= 28) {
+            WindowManager.LayoutParams lp = getWindow().getAttributes();
+            lp.layoutInDisplayCutoutMode = Build.VERSION.SDK_INT >= 30
+                    ? WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS
+                    : WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES;
+            getWindow().setAttributes(lp);
+        }
         gridJs = Util.asset(this, "grid.js");
         takeOpen(getIntent());
 
         web = new WebView(this);
         web.setBackgroundColor(Color.parseColor("#0c1018"));
         setContentView(web);
+        web.setOnApplyWindowInsetsListener((v, insets) -> { readSafeArea(insets); pushSafeArea(); return insets; });
         hideSystemBars();
 
         WebSettings s = web.getSettings();
@@ -69,7 +82,7 @@ public class GridActivity extends Activity {
 
             @Override
             public void onPageFinished(WebView view, String url) {
-                if (url != null && url.startsWith(START)) view.evaluateJavascript(SHIM + gridJs, v -> { gridReady = true; deliverOpen(); });
+                if (url != null && url.startsWith(START)) { pushSafeArea(); view.evaluateJavascript(SHIM + gridJs, v -> { gridReady = true; deliverOpen(); }); }
             }
 
             @Override
@@ -80,6 +93,33 @@ public class GridActivity extends Activity {
             }
         });
         web.loadUrl(START);
+    }
+
+    @SuppressWarnings("deprecation")
+    private void readSafeArea(WindowInsets in) {
+        float d = getResources().getDisplayMetrics().density;
+        int l, t, r, b;
+        if (Build.VERSION.SDK_INT >= 30) {
+            android.graphics.Insets c = in.getInsets(WindowInsets.Type.displayCutout() | WindowInsets.Type.systemBars());
+            android.graphics.Insets g = in.getInsets(WindowInsets.Type.mandatorySystemGestures());
+            l = c.left; t = c.top; r = c.right; b = Math.max(c.bottom, g.bottom);
+        } else {
+            l = in.getSystemWindowInsetLeft(); t = in.getSystemWindowInsetTop(); r = in.getSystemWindowInsetRight(); b = in.getSystemWindowInsetBottom();
+            if (Build.VERSION.SDK_INT >= 28 && in.getDisplayCutout() != null) {
+                android.view.DisplayCutout dc = in.getDisplayCutout();
+                l = Math.max(l, dc.getSafeInsetLeft()); t = Math.max(t, dc.getSafeInsetTop());
+                r = Math.max(r, dc.getSafeInsetRight()); b = Math.max(b, dc.getSafeInsetBottom());
+            }
+        }
+        safe[0] = Math.round(l / d); safe[1] = Math.round(t / d); safe[2] = Math.round(r / d); safe[3] = Math.round(b / d);
+    }
+
+    private void pushSafeArea() {
+        if (web == null) return;
+        web.evaluateJavascript("(function(){var s=document.documentElement.style;"
+                + "s.setProperty('--mgv-il','" + safe[0] + "px');s.setProperty('--mgv-it','" + safe[1] + "px');"
+                + "s.setProperty('--mgv-ir','" + safe[2] + "px');s.setProperty('--mgv-ib','" + safe[3] + "px');"
+                + "window.dispatchEvent(new Event('resize'))})()", null);
     }
 
     @Override
