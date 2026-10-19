@@ -58,6 +58,7 @@ jobs:
           path: MyStream-*.apk
 
       - name: Publish as a release (download it on your phone)
+        if: github.ref == 'refs/heads/main'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v1.0.${{ github.run_number }}
