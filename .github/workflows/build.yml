@@ -5,6 +5,11 @@ on:
     branches: [main]
     paths-ignore: ['windows/**', '.github/workflows/build-windows.yml']
   workflow_dispatch:
+    inputs:
+      publish:
+        description: 'Publish this build as a pre-release (test)'
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -58,10 +63,11 @@ jobs:
           path: MyStream-*.apk
 
       - name: Publish as a release (download it on your phone)
-        if: github.ref == 'refs/heads/main'
+        if: github.ref == 'refs/heads/main' || inputs.publish
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v1.0.${{ github.run_number }}
+          prerelease: ${{ github.ref != 'refs/heads/main' }}
           name: MyStream v1.0.${{ github.run_number }}
           files: MyStream-*.apk
           body: |
