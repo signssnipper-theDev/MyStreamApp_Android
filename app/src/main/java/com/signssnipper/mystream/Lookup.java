@@ -17,6 +17,29 @@ final class Lookup {
     /** Last HTTP status from the lookup (401 = the site refused the session). */
     static volatile int lastStatus = 0;
 
+    /** Diagnostics: the last response code and the start of the site's reply. */
+    static volatile String lastDetail = "no check yet";
+
+    private static String readSnippet(InputStream in) {
+        if (in == null) return "(no body)";
+        try (InputStream i = in) {
+            byte[] b = new byte[120];
+            int n = i.read(b);
+            return n <= 0 ? "(empty body)" : new String(b, 0, n, "UTF-8").replaceAll("[\\r\\n]+", " ");
+        } catch (Exception e) {
+            return "(unreadable: " + e.getMessage() + ")";
+        }
+    }
+
+    /** Diagnostics: the WebView version on this phone. */
+    static String webViewVersion() {
+        try {
+            return android.webkit.WebView.getCurrentWebViewPackage().versionName;
+        } catch (Exception e) {
+            return "unknown";
+        }
+    }
+
     static final String UA = "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Mobile Safari/537.36";
 
     /** @return TRUE live, FALSE not live, null when Tango gave no clear answer. */
@@ -37,6 +60,7 @@ final class Lookup {
             } catch (Exception ignored) {}
             int code = c.getResponseCode();
             lastStatus = code;
+            lastDetail = code == 200 ? "200 OK" : code + ": " + readSnippet(c.getErrorStream());
             if (code == 404) return Boolean.FALSE;
             if (code == 200) {
                 try (InputStream in = c.getInputStream()) {
