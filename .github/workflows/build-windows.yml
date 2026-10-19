@@ -20,7 +20,7 @@ jobs:
       ELECTRON_VERSION: '44.7.0'
       ELECTRON_SHA256: 'EEE30DC8FA1F5EA95490E59F44E46EA68DD24C6E93D22FACF70FE5C2D4C2665C'
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Read version
         id: ver
@@ -58,7 +58,12 @@ jobs:
           if (-not $mk) {
             foreach ($p in @("${env:ProgramFiles(x86)}\NSIS\makensis.exe", "$env:ProgramFiles\NSIS\makensis.exe")) { if (Test-Path $p) { $mk = $p } }
           }
-          if (-not $mk) { choco install nsis -y --no-progress | Out-Null; $mk = "${env:ProgramFiles(x86)}\NSIS\makensis.exe" }
+          if (-not $mk) {
+            choco install nsis -y --no-progress --force
+            if ($LASTEXITCODE -ne 0) { throw "choco install nsis failed (exit $LASTEXITCODE)" }
+            $mk = @("${env:ProgramFiles(x86)}\NSIS\makensis.exe", "$env:ProgramFiles\NSIS\makensis.exe") | Where-Object { Test-Path $_ } | Select-Object -First 1
+            if (-not $mk) { throw "makensis not found after install" }
+          }
           if ($mk -is [System.Management.Automation.CommandInfo]) { $mk = $mk.Source }
           "MAKENSIS=$mk" | Out-File -Append $env:GITHUB_ENV
           Write-Host "Using $mk"
