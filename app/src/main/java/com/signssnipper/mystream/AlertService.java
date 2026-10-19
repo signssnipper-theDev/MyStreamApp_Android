@@ -66,7 +66,7 @@ public class AlertService extends Service {
             JSONObject status = Prefs.status(this);
             int live = 0;
             for (String u : users) {
-                Boolean r = Lookup.isLive(this, u);
+                Boolean r = Lookup.isLive(u);
                 JSONObject prev = status.optJSONObject(u);
                 int was = prev == null ? -1 : prev.optInt("live", -1);
                 if (r != null) {
