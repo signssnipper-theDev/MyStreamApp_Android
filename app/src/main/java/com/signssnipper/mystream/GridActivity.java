@@ -28,7 +28,7 @@ public class GridActivity extends Activity {
     // Lets the grid's dock open the account and alerts screens. On a phone the
     // dock starts shrunk to one "Controls" button to leave room for the streams.
     static final String SHIM =
-            "window.mgvApp={openAlerts:function(){MgvAndroid.openAlerts()},resetSession:function(s){MgvAndroid.resetSession(s|0)},log:function(){}};"
+            "window.mgvApp={openAccount:function(){MgvAndroid.openAccount()},openAlerts:function(){MgvAndroid.openAlerts()},resetSession:function(s){MgvAndroid.resetSession(s|0)},log:function(){}};"
             + "try{if(localStorage.getItem('sp_dock_small')===null)localStorage.setItem('sp_dock_small','1')}catch(e){}\n";
 
     private WebView web;
@@ -156,7 +156,21 @@ public class GridActivity extends Activity {
         cm.flush();
     }
 
+    static final int REQ_ACCOUNT = 1;
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        // Back from the Tango account screen: reload so every cell uses the new sign-in.
+        if (requestCode == REQ_ACCOUNT && web != null) web.reload();
+    }
+
     class Bridge {
+        @JavascriptInterface
+        public void openAccount() {
+            runOnUiThread(() -> startActivityForResult(new Intent(GridActivity.this, AccountActivity.class), REQ_ACCOUNT));
+        }
+
         @JavascriptInterface
         public void openAlerts() {
             runOnUiThread(() -> startActivity(new Intent(GridActivity.this, AlertsActivity.class)));

@@ -190,6 +190,7 @@ html.sp-anon .sp-chat .ln b{display:none;}
   <div class="sp-sec"><h2>VIEW</h2><div class="sp-row"><button id="sp-anon-btn"></button><button id="sp-allhide"></button><button id="sp-fs"></button></div></div>
   <div class="sp-sec"><h2>PICTURE</h2><div class="sp-row"><button id="sp-fx-sharp"></button><button id="sp-fx-sat"></button><button id="sp-fx-tone"></button></div></div>
   <div class="sp-sec"><h2>CHAT</h2><div class="sp-row"><button id="sp-chat-btn"></button></div></div>
+  ${window.mgvApp && window.mgvApp.openAccount ? '<div class="sp-sec"><h2>ACCOUNT</h2><div class="sp-row"><button id="sp-account">Sign in to Tango</button></div></div>' : ''}
   ${window.mgvApp && window.mgvApp.openAlerts ? '<div class="sp-sec"><h2>ALERTS</h2><div class="sp-row"><button id="sp-alerts">Alerts</button></div></div>' : ''}
   <button id="sp-dockmin" title="Shrink controls" aria-label="Shrink controls">&#x2013;</button>
   <button id="sp-dockopen">Controls</button>
@@ -703,6 +704,7 @@ html.sp-anon .sp-chat .ln b{display:none;}
   input.addEventListener('keydown', e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); $('sp-go').click(); } if (e.key === 'Escape') openPop(false); });
 
   // ---------- account (Windows app only) ----------
+  if (window.mgvApp && window.mgvApp.openAccount && $('sp-account')) $('sp-account').onclick = () => window.mgvApp.openAccount();
   if (window.mgvApp && window.mgvApp.openAlerts && $('sp-alerts')) $('sp-alerts').onclick = () => window.mgvApp.openAlerts();
 
   // ---------- view ----------
