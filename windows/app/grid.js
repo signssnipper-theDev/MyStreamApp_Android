@@ -79,16 +79,17 @@ html.sp-anon .sp-name .nm{display:none;} html.sp-anon .sp-name .an{display:inlin
 .sp-body{position:relative;flex:1;min-height:0;margin:0 6px 6px;border-radius:10px;overflow:hidden;background:#000;}
 .sp-body iframe{position:absolute;inset:0;width:100%;height:100%;border:0;background:#000;}
 .sp-zoomer{position:absolute;inset:0;z-index:2;touch-action:none;cursor:zoom-in;display:none;}
-.sp-cell.live.vready .sp-zoomer{display:block;}
+.sp-cell.live .sp-zoomer{display:block;}
 .sp-cell.zoomed .sp-zoomer{cursor:grab;} .sp-cell.zoomed .sp-zoomer.drag{cursor:grabbing;}
 .sp-chat{z-index:3;}
 #sp-root .sp-zm{width:auto;min-width:30px;padding:0 7px;font-size:12px;font-variant-numeric:tabular-nums;display:none;}
 #sp-root .sp-cell.zoomed .sp-zm{display:grid;}
 /* The frame stays fully visible underneath (a hidden frame makes the site's player
    drop to a slow mode it doesn't leave); the cover sits on top until it's ready. */
-.sp-cell:not(.vready) iframe{pointer-events:none !important;}
+/* Loading as in 1.8.0: the stream's page shows faded until the broadcaster is live. */
+.sp-cell:not(.live) iframe{opacity:.35;}
 .sp-wait{position:absolute;inset:0;z-index:1;background:#000;display:grid;place-items:center;align-content:center;gap:10px;color:var(--muted);font-size:13px;text-align:center;padding:12px;}
-.sp-cell.vready .sp-wait{display:none;}
+.sp-wait{display:none !important;}
 .sp-spin{width:22px;height:22px;border-radius:50%;border:2px solid var(--line2);border-top-color:var(--accent2);animation:sp-spin 1s linear infinite;}
 .sp-cell.off .sp-spin{display:none;}
 @keyframes sp-spin{to{transform:rotate(360deg)}}
@@ -426,7 +427,7 @@ html.sp-anon .sp-chat .ln b{display:none;}
       msg.textContent = live ? 'Starting video…' : off ? 'Not live right now' : 'Connecting…';
       const dn = disp();
       nm.textContent = '@' + user + (dn ? ' (' + dn + ')' : '');
-      st.textContent = live ? '· LIVE' : off ? '· not live' : '· checking…';
+      st.textContent = live ? '· LIVE' : '· not live';
     };
     // Fast checks while the cell is getting ready, then every 4 seconds.
     const every = (fn, ms) => { const id = setInterval(fn, ms); el.__t.push(id); window.__spTimers.push(id); };
@@ -695,15 +696,16 @@ html.sp-anon .sp-chat .ln b{display:none;}
   // ---------- about ----------
   const ABOUT_FEATURES = [
     ['Account sign-in', 'Sign in from APP > Account. The grid and Alerts use your sign-in; signed out, they watch as a guest.'],
-    ['Live detection', 'The grid checks each broadcaster with your sign-in and shares it with Alerts.'],
+    ['Live detection', 'The grid checks each broadcaster with your sign-in. It shares the sign-in with Alerts shortly after start, every 30 minutes and when you close Account.'],
     ['Video-sized cells', 'Each tile takes the shape of the video, with a maximize button to show one stream large.'],
-    ['Clean loading', 'A spinner shows while a stream connects; only the video appears, never the site page.'],
+    ['Loading', 'While a stream connects its page shows faded; the video takes over once the broadcaster is live.'],
     ['Cell menu', 'Picture (contrast, brightness, saturation per broadcaster), Minimize, Hide video, Move earlier/later, Remove.'],
     ['Rearrange', 'Drag a tile by its header, or use Move earlier/later in its menu.'],
     ['Zoom', 'Scroll or pinch on a tile to zoom, drag to move, double-click to reset.'],
     ['Picture', 'Sharpen, Saturation and Color for all tiles from the PICTURE controls.'],
     ['Controls dock', 'Shrinks to a small pill in the corner; one scrollable row in narrow windows.'],
     ['Alerts', 'Tray app with a pop-up and a small live preview when a broadcaster goes live; click to open them in the grid.'],
+    ['Refused checks', 'If the site refuses a live check, the cell keeps checking on its own and the refusal is logged.'],
     ['Diagnostics', 'Check and grid logs in %APPDATA%\\MultiGridView Alerts for tracing problems.']
   ];
   if (window.mgvApp && window.mgvApp.about && $('sp-about')) {

@@ -107,7 +107,7 @@ ipcMain.on('mgv:log', (e, o) => diagLog(o && typeof o === 'object' ? o : { msg: 
 // ---------- share your sign-in with the alerts app ----------
 // Copies the site's cookies (your sign-in, or the guest session when signed out)
 // to the alerts app's folder so its checks see what your account sees.
-// Refreshed shortly after start, every 5 minutes and when the account window closes.
+// Refreshed 15 seconds after start, every 30 minutes and when the account window closes.
 const SHARE = path.join(app.getPath('appData'), 'MultiGridView Alerts', 'tango-session.json');
 async function exportSession() {
   try {
@@ -172,5 +172,5 @@ app.on('second-instance', (e, argv) => {
   if (u) return requestOpen(u);
   if (win) { if (win.isMinimized()) win.restore(); win.focus(); }
 });
-app.whenReady().then(async () => { diagLog({ start: 'grid', app: app.getVersion(), chrome: process.versions.chrome, electron: process.versions.electron, ua: app.userAgentFallback }); createWindow(); requestOpen(openArg(process.argv)); setTimeout(exportSession, 20000); setInterval(exportSession, 5 * 60000); });
+app.whenReady().then(async () => { diagLog({ start: 'grid', app: app.getVersion(), chrome: process.versions.chrome, electron: process.versions.electron, ua: app.userAgentFallback }); createWindow(); requestOpen(openArg(process.argv)); setTimeout(exportSession, 15000); setInterval(exportSession, 30 * 60000); });
 app.on('window-all-closed', () => app.quit());

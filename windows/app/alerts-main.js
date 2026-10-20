@@ -61,6 +61,10 @@ function start() {
     shareStamp = stamp;
     try { data = JSON.parse(fs.readFileSync(SHARE, 'utf8')); } catch (e) { return false; }
     const jar = session.defaultSession.cookies;
+    // As in 1.8.0: drop the previous copy first, then take the new one.
+    if (data && Array.isArray(data.cookies)) {
+      try { for (const c of await jar.get({})) if (/(^|\.)tango\.me$/.test((c.domain || '').replace(/^\./, ''))) await jar.remove('https://' + c.domain.replace(/^\./, '') + (c.path || '/'), c.name); } catch (e) {}
+    }
     for (const c of (data && data.cookies) || []) {
       try {
         const host = c.domain.replace(/^\./, '');
@@ -70,7 +74,7 @@ function start() {
         await jar.set(o);
       } catch (e) {}
     }
-    checkLog({ why: 'guest-session-imported', from: new Date(data.at || stamp).toISOString() });
+    checkLog({ why: 'session-imported', from: new Date(data.at || stamp).toISOString() });
     return true;
   }
 
