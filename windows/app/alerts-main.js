@@ -50,9 +50,8 @@ function start() {
   const liveCount = () => cfg.users.filter(u => status[u] && status[u].live).length;
 
   // ---------- guest session shared by the grid ----------
-  // No account sign-in. The grid app runs the site as a guest, and the site keeps
-  // that guest session renewed while the grid is open. The grid copies the guest
-  // cookies here (tango-session.json) and the checks use the newest copy.
+  // Your sign-in from the grid (or its guest session when signed out). The grid
+  // copies the site's cookies here (tango-session.json); checks use the newest copy.
   const SHARE = path.join(app.getPath('userData'), 'tango-session.json');
   let shareStamp = -1;
   async function importSession(force) {
@@ -284,6 +283,7 @@ function start() {
     if (!tray) return;
     tray.setContextMenu(Menu.buildFromTemplate([
       { label: `${liveCount()} of ${cfg.users.length} live`, enabled: false },
+      { label: `MultiGridView ${app.getVersion()}`, enabled: false },
       { type: 'separator' },
       { label: 'Open MultiGridView', click: () => openGrid() },
       { label: 'Alerts settings…', click: openSettings },

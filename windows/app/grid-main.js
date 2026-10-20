@@ -104,38 +104,10 @@ function diagLog(o) {
 }
 ipcMain.on('mgv:log', (e, o) => diagLog(o && typeof o === 'object' ? o : { msg: String(o) }));
 
-// ---------- session repair ----------
-// Stage 1: remove the sign-in cookies (an expired sign-in the site could not renew).
-// Stage 2: remove every cookie of the site, so it starts a fresh visitor session.
-// Settings and lists live in the page's own storage and are not touched.
-const SIGNIN_COOKIES = ['tt', 'ttu', 'tte', 'Tango-SD'];
-async function resetTangoCookies(ses, stage) {
-  const jar = ses.cookies; let n = 0;
-  for (const c of await jar.get({})) {
-    const host = (c.domain || '').replace(/^\./, '');
-    if (!/(^|\.)tango\.me$/.test(host)) continue;
-    if (stage < 2 && !SIGNIN_COOKIES.includes(c.name)) continue;
-    try { await jar.remove('https://' + host + (c.path || '/'), c.name); n++; } catch (e) {}
-  }
-  for (const origin of ['https://www.tango.me', 'https://tango.me', 'https://gateway.tango.me']) {
-    try { await ses.clearStorageData({ origin, storages: ['indexdb', 'serviceworkers', 'cachestorage'] }); } catch (e) {}
-  }
-  try { await jar.flushStore(); } catch (e) {}
-  return n;
-}
-let lastReset = 0;
-ipcMain.on('mgv:reset-session', async (e, stage) => {
-  if (Date.now() - lastReset < 60000) return; lastReset = Date.now();
-  const n = await resetTangoCookies(session.defaultSession, stage === 2 ? 2 : 1);
-  diagLog({ why: 'session-reset', stage, removed: n });
-  if (win && !win.isDestroyed()) win.webContents.reload();
-  setTimeout(exportSession, 20000);
-});
-
-// ---------- share the guest session with the alerts app ----------
-// The app runs the site as a guest (no account sign-in). The site renews that
-// guest session while the grid is open; a copy goes to the alerts app so its
-// live checks are accepted too. Refreshed shortly after start and every 5 minutes.
+// ---------- share your sign-in with the alerts app ----------
+// Copies the site's cookies (your sign-in, or the guest session when signed out)
+// to the alerts app's folder so its checks see what your account sees.
+// Refreshed shortly after start, every 5 minutes and when the account window closes.
 const SHARE = path.join(app.getPath('appData'), 'MultiGridView Alerts', 'tango-session.json');
 async function exportSession() {
   try {
@@ -146,6 +118,54 @@ async function exportSession() {
     fs.writeFileSync(SHARE, JSON.stringify({ at: Date.now(), cookies: mine }));
   } catch (e) {}
 }
+
+// ---------- account window ----------
+// Opens the site itself so you can sign in (or out). The sign-in lives in the
+// app's own browser storage, is used by the grid and is shared with Alerts.
+let acctWin = null;
+const AUTH_HOSTS = /(^|\.)(tango\.me|google\.com|googleusercontent\.com|gstatic\.com|apple\.com|facebook\.com|twitter\.com|x\.com|telegram\.org|t\.me)$/;
+const isAuth = u => { try { return AUTH_HOSTS.test(new URL(u).hostname); } catch (e) { return false; } };
+function openAccount() {
+  if (acctWin && !acctWin.isDestroyed()) { acctWin.focus(); return; }
+  acctWin = new BrowserWindow({
+    width: 520, height: 860, minWidth: 380, minHeight: 560, parent: win || undefined,
+    title: 'Account', backgroundColor: '#0c1018', autoHideMenuBar: true,
+    webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true }
+  });
+  acctWin.setMenu(null);
+  acctWin.on('page-title-updated', e => { e.preventDefault(); acctWin.setTitle('Account'); });
+  const awc = acctWin.webContents;
+  // Google blocks its sign-in inside apps, so explain the options that work.
+  const isGoogleSignIn = u => { try { const h = new URL(u).hostname; return h === 'accounts.google.com' || h.endsWith('.accounts.google.com'); } catch (e) { return false; } };
+  let googleNoticeAt = 0;
+  const googleNotice = () => {
+    if (Date.now() - googleNoticeAt < 3000) return; googleNoticeAt = Date.now();
+    dialog.showMessageBox(acctWin, { type: 'info', title: 'Use Email or Phone sign-in', buttons: ['OK'],
+      message: 'Google sign-in does not work inside apps',
+      detail: 'Google blocks its sign-in in apps like this one, so please choose "Continue with Email" or "Continue with Phone" instead.' });
+  };
+  awc.on('will-navigate', (e, url) => {
+    if (isGoogleSignIn(url)) { e.preventDefault(); googleNotice(); return; }
+    if (!isAuth(url)) { e.preventDefault(); if (/^https?:/.test(url)) shell.openExternal(url); }
+  });
+  awc.on('did-create-window', w => {
+    w.webContents.on('will-navigate', (e, url) => { if (isGoogleSignIn(url)) { e.preventDefault(); googleNotice(); w.close(); } });
+    w.webContents.on('did-navigate', (e, url) => { if (isGoogleSignIn(url)) { googleNotice(); w.close(); } });
+  });
+  awc.setWindowOpenHandler(({ url }) => {
+    if (isGoogleSignIn(url)) { googleNotice(); return { action: 'deny' }; }
+    if (isAuth(url)) return { action: 'allow', overrideBrowserWindowOptions: { width: 500, height: 680, parent: acctWin, autoHideMenuBar: true } };
+    if (/^https?:/.test(url)) shell.openExternal(url);
+    return { action: 'deny' };
+  });
+  acctWin.loadURL(new URL(START_URL).origin + '/');
+  // On close: share the new sign-in state with Alerts and reload the grid.
+  acctWin.on('closed', () => { acctWin = null; exportSession(); if (win && !win.isDestroyed()) win.webContents.reload(); });
+}
+ipcMain.on('mgv:account', () => openAccount());
+
+// ---------- about ----------
+ipcMain.handle('mgv:about', () => ({ version: app.getVersion(), electron: process.versions.electron, chrome: process.versions.chrome }));
 
 app.on('second-instance', (e, argv) => {
   const u = openArg(argv);

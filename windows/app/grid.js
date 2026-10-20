@@ -190,7 +190,7 @@ html.sp-anon .sp-chat .ln b{display:none;}
   <div class="sp-sec"><h2>VIEW</h2><div class="sp-row"><button id="sp-anon-btn"></button><button id="sp-allhide"></button><button id="sp-fs"></button></div></div>
   <div class="sp-sec"><h2>PICTURE</h2><div class="sp-row"><button id="sp-fx-sharp"></button><button id="sp-fx-sat"></button><button id="sp-fx-tone"></button></div></div>
   <div class="sp-sec"><h2>CHAT</h2><div class="sp-row"><button id="sp-chat-btn"></button></div></div>
-  ${window.mgvApp && window.mgvApp.openAlerts ? '<div class="sp-sec"><h2>ALERTS</h2><div class="sp-row"><button id="sp-alerts">Alerts</button></div></div>' : ''}
+  ${window.mgvApp ? '<div class="sp-sec"><h2>APP</h2><div class="sp-row">' + (window.mgvApp.openAccount ? '<button id="sp-acct">Account</button>' : '') + (window.mgvApp.openAlerts ? '<button id="sp-alerts">Alerts</button>' : '') + (window.mgvApp.about ? '<button id="sp-about">About</button>' : '') + '</div></div>' : ''}
   <button id="sp-dockmin" title="Shrink controls" aria-label="Shrink controls">&#x2013;</button>
   <button id="sp-dockopen">Controls</button>
 </div>`;
@@ -311,27 +311,12 @@ html.sp-anon .sp-chat .ln b{display:none;}
     el.querySelector('.sp-zm').onclick = () => zset(f, el, u, 1, 0, 0);
   }
 
-  // ---------- keep the session usable ----------
-  // The live lookup needs a valid session. If it keeps answering "not authorized"
-  // (an expired sign-in the site couldn't renew), ask the app to repair it:
-  // stage 1 drops just the expired sign-in, stage 2 starts a fresh visitor session.
-  let auth401 = 0, repairStage = 0, repairAt = 0;
-  function sessionOk() { auth401 = 0; if (store.get('sp_repair_stage')) store.set('sp_repair_stage', ''); }
-  function sessionTrouble(status, body) {
-    auth401++;
-    if (auth401 < 3 || !window.mgvApp || !window.mgvApp.resetSession || Date.now() - repairAt < 90000) return;
-    let stage = 1; try { stage = Math.min(2, (+store.get('sp_repair_stage') || 0) + 1); } catch (e) {}
-    repairAt = Date.now(); auth401 = 0;
-    store.set('sp_repair_stage', String(stage));
-    store.set('sp_note', 'Live detection was being refused by the site, so the app reset its connection and is checking again.');
-    if (window.mgvApp.log) window.mgvApp.log({ why: 'session-repair', stage, status, body });
-    // The site keeps its session in cookies and in page storage; clear both together
-    // (your grid settings, the sp_ entries, are kept).
-    try { Object.keys(localStorage).filter(k => !k.startsWith('sp_')).forEach(k => localStorage.removeItem(k)); sessionStorage.clear(); } catch (e) {}
-    window.mgvApp.resetSession(stage);
-  }
+  // Live lookups use your sign-in when you're signed in (Account), otherwise the
+  // guest session. A refused lookup is logged; the cell's own check still works.
+  function sessionOk() {}
+  function sessionTrouble(status, body) { if (window.mgvApp && window.mgvApp.log) window.mgvApp.log({ why: 'lookup-refused', status, body }); }
 
-  // The site's own live lookup (runs as a visitor).
+  // The site's own live lookup (with your sign-in when signed in).
   // Returns {live:true,id} / {live:false} / null when it can't tell.
   const lastLookup = {};
   async function lookup(user) {
@@ -704,6 +689,46 @@ html.sp-anon .sp-chat .ln b{display:none;}
 
   // ---------- account (Windows app only) ----------
   if (window.mgvApp && window.mgvApp.openAlerts && $('sp-alerts')) $('sp-alerts').onclick = () => window.mgvApp.openAlerts();
+
+  if (window.mgvApp && window.mgvApp.openAccount && $('sp-acct')) { $('sp-acct').title = 'Sign in or out. The grid reloads when you close the window.'; $('sp-acct').onclick = () => window.mgvApp.openAccount(); }
+
+  // ---------- about ----------
+  const ABOUT_FEATURES = [
+    ['Account sign-in', 'Sign in from APP > Account. The grid and Alerts use your sign-in; signed out, they watch as a guest.'],
+    ['Live detection', 'The grid checks each broadcaster with your sign-in and shares it with Alerts.'],
+    ['Video-sized cells', 'Each tile takes the shape of the video, with a maximize button to show one stream large.'],
+    ['Clean loading', 'A spinner shows while a stream connects; only the video appears, never the site page.'],
+    ['Cell menu', 'Picture (contrast, brightness, saturation per broadcaster), Minimize, Hide video, Move earlier/later, Remove.'],
+    ['Rearrange', 'Drag a tile by its header, or use Move earlier/later in its menu.'],
+    ['Zoom', 'Scroll or pinch on a tile to zoom, drag to move, double-click to reset.'],
+    ['Picture', 'Sharpen, Saturation and Color for all tiles from the PICTURE controls.'],
+    ['Controls dock', 'Shrinks to a small pill in the corner; one scrollable row in narrow windows.'],
+    ['Alerts', 'Tray app with a pop-up and a small live preview when a broadcaster goes live; click to open them in the grid.'],
+    ['Diagnostics', 'Check and grid logs in %APPDATA%\\MultiGridView Alerts for tracing problems.']
+  ];
+  if (window.mgvApp && window.mgvApp.about && $('sp-about')) {
+    const box = D.createElement('div');
+    box.id = 'sp-aboutbox'; box.setAttribute('role', 'dialog'); box.setAttribute('aria-modal', 'true'); box.setAttribute('aria-label', 'About MultiGridView');
+    box.style.cssText = 'position:absolute;inset:0;z-index:20;display:none;place-items:center;background:rgba(5,8,14,.6);padding:16px;box-sizing:border-box';
+    box.innerHTML = '<div style="width:min(560px,100%);max-height:calc(100% - 32px);overflow:auto;background:var(--panel);border:1px solid var(--line2);border-radius:16px;box-shadow:0 10px 30px rgba(0,0,0,.5);padding:18px 20px;box-sizing:border-box;display:flex;flex-direction:column;gap:12px">'
+      + '<div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px"><div style="font:700 18px Sora,system-ui,sans-serif;color:var(--ink)">MultiGridView</div><div id="sp-aboutver" style="font:600 13px ui-monospace,Consolas,monospace;color:var(--accent2)"></div></div>'
+      + '<div id="sp-aboutengine" style="color:var(--muted);font-size:12px"></div>'
+      + '<div style="font:700 11px Sora,system-ui,sans-serif;letter-spacing:.16em;color:var(--accent2)">FEATURES</div>'
+      + '<dl id="sp-aboutlist" style="margin:0;display:grid;grid-template-columns:minmax(110px,auto) 1fr;gap:8px 14px;font-size:13px"></dl>'
+      + '<div style="color:var(--muted);font-size:12px">View-only: the app never records streams.</div>'
+      + '<div style="display:flex;justify-content:flex-end"><button id="sp-aboutclose" class="primary">Close</button></div></div>';
+    root.appendChild(box);
+    const dl = box.querySelector('#sp-aboutlist');
+    ABOUT_FEATURES.forEach(([k, v]) => { const dt = D.createElement('dt'); dt.textContent = k; dt.style.cssText = 'font-weight:600;color:var(--ink)'; const dd = D.createElement('dd'); dd.textContent = v; dd.style.cssText = 'margin:0;color:var(--muted)'; dl.append(dt, dd); });
+    const close = () => { box.style.display = 'none'; };
+    box.querySelector('#sp-aboutclose').onclick = close;
+    box.addEventListener('click', e => { if (e.target === box) close(); });
+    D.addEventListener('keydown', e => { if (e.key === 'Escape' && box.style.display !== 'none') close(); });
+    $('sp-about').onclick = async () => {
+      try { const a = await window.mgvApp.about(); box.querySelector('#sp-aboutver').textContent = 'Version ' + a.version; box.querySelector('#sp-aboutengine').textContent = 'Windows app · Electron ' + a.electron + ' · Chromium ' + a.chrome; } catch (e) {}
+      box.style.display = 'grid'; box.querySelector('#sp-aboutclose').focus();
+    };
+  }
 
   // ---------- view ----------
   H.classList.add('sp-anon');

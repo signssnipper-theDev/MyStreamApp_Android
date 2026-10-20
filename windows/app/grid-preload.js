@@ -1,6 +1,7 @@
-// Lets the grid page write diagnostics and ask the app to repair its session.
+// Lets the grid page open the account window, show the About details and write diagnostics.
 const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('mgvApp', {
-  log: o => ipcRenderer.send('mgv:log', o),
-  resetSession: stage => ipcRenderer.send('mgv:reset-session', stage)
+  openAccount: () => ipcRenderer.send('mgv:account'),
+  about: () => ipcRenderer.invoke('mgv:about'),
+  log: o => ipcRenderer.send('mgv:log', o)
 });
