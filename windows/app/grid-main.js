@@ -28,6 +28,7 @@ function deliverOpen() {
   if (!gridReady || !win || win.isDestroyed()) return;
   while (pendingOpen.length) {
     const u = pendingOpen.shift();
+    if (win.webContents.isDestroyed()) return;
     win.webContents.executeJavaScript(`window.__spAddUser && window.__spAddUser(${JSON.stringify(u)})`).catch(() => {});
   }
 }
@@ -78,13 +79,13 @@ function createWindow() {
     else if (k === 'Escape' && win.isFullScreen()) { win.setFullScreen(false); }
     else if (input.control && input.shift && k.toLowerCase() === 'i') { e.preventDefault(); wc.toggleDevTools(); }
   });
-  wc.on('render-process-gone', () => { setTimeout(() => { if (!win.isDestroyed()) wc.loadURL(START_URL); }, 1500); });
+  wc.on('render-process-gone', () => { setTimeout(() => { if (!win.isDestroyed() && !wc.isDestroyed()) wc.loadURL(START_URL); }, 1500); });
   wc.on('did-fail-load', (e, code, desc, url, isMain) => {
     if (!isMain || code === -3) return;
     const html = `<body style="background:#000;color:#ddd;font:15px system-ui;display:grid;place-items:center;height:100vh;margin:0">
       <div style="text-align:center"><p>Couldn't reach tango.me (${desc}).</p><p>Check your internet connection. Retrying in 10 seconds…</p></div></body>`;
     wc.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(html));
-    setTimeout(() => { if (!win.isDestroyed()) wc.loadURL(START_URL); }, 10000);
+    setTimeout(() => { if (!win.isDestroyed() && !wc.isDestroyed()) wc.loadURL(START_URL); }, 10000);
   });
 
   wc.loadURL(START_URL);
@@ -160,7 +161,11 @@ function openAccount() {
   });
   acctWin.loadURL(new URL(START_URL).origin + '/');
   // On close: share the new sign-in state with Alerts and reload the grid.
-  acctWin.on('closed', () => { acctWin = null; exportSession(); if (win && !win.isDestroyed()) win.webContents.reload(); });
+  // (When the app itself is closing, the grid may already be gone: then just share.)
+  acctWin.on('closed', () => {
+    acctWin = null; exportSession();
+    try { if (win && !win.isDestroyed() && !win.webContents.isDestroyed()) win.webContents.reload(); } catch (e) {}
+  });
 }
 ipcMain.on('mgv:account', () => openAccount());
 
