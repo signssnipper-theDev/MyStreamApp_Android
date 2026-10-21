@@ -1,4 +1,5 @@
-// Go-live pop-up with a small live preview (MultiGridView Alerts).
+// Small live video for MultiGridView Alerts: the go-live pop-up ("popup" mode) and
+// the thumbnails in the Alerts status list ("tile" mode).
 // Injected into a page of the stream site (same origin as the frame it shows), with
 // window.__mgvPreview = { user, name } set first. The preview is muted, shows only
 // the video, and plays only while the pop-up is on screen; until the video is ready
@@ -6,15 +7,22 @@
 (() => {
   const P = window.__mgvPreview || {};
   const user = String(P.user || ''), name = String(P.name || 'A broadcaster');
+  const mode = P.mode === 'tile' ? 'tile' : 'popup';
   const D = document;
-  D.title = 'Live now';
+  D.title = mode === 'tile' ? 'Live' : 'Live now';
   const css = D.createElement('style');
   css.textContent = `
 html,body{margin:0;height:100%;background:#131a26 !important;overflow:hidden !important;}
 body > *:not(#pv){display:none !important;}
 #pv{position:fixed;inset:0;z-index:2147483647;display:flex;gap:12px;padding:10px 12px 10px 10px;box-sizing:border-box;border:1px solid #2a3549;background:#131a26;color:#e3e8f2;font:13px/1.35 'Segoe UI',system-ui,sans-serif;user-select:none;}
 #pv .vid{position:relative;flex:none;width:118px;height:210px;border-radius:10px;overflow:hidden;background:#000;border:1px solid #2a3549;}
-#pv iframe{position:absolute;inset:0;width:100%;height:100%;border:0;background:#000;pointer-events:none;}
+/* The stream page gets a normal phone-sized viewport (360x640) and is scaled down
+   to fit; at a tiny viewport the site's player can stay black. */
+#pv iframe{position:absolute;left:0;top:0;width:360px;height:640px;border:0;background:#000;pointer-events:none;transform-origin:0 0;}
+#pv.tile{padding:0;border:0;gap:0;background:#000;cursor:pointer;}
+#pv.tile .vid{width:100%;height:100%;border:0;border-radius:0;}
+#pv.tile .txt,#pv.tile .x{display:none;}
+#pv.tile .badge{left:3px;top:3px;font-size:8px;padding:1px 4px;}
 #pv .cover{position:absolute;inset:0;background:#000 center/cover no-repeat;display:grid;place-items:center;}
 #pv.ready .cover{display:none;}
 #pv .spin{width:20px;height:20px;border-radius:50%;border:2px solid rgba(255,255,255,.25);border-top-color:#7aa2ff;animation:pvs 1s linear infinite;}
@@ -36,28 +44,51 @@ body > *:not(#pv){display:none !important;}
 
   const root = D.createElement('div');
   root.id = 'pv';
+  if (mode === 'tile') root.className = 'tile';
   root.innerHTML = `<div class="vid"><iframe allow="autoplay"></iframe><div class="cover"><div class="spin"></div></div><span class="badge">LIVE</span></div>
     <div class="txt"><div class="k">LIVE NOW</div><div class="n"></div><div class="note">Preview is muted</div>
     <div class="row"><button class="primary" id="pv-open">Open in MultiGridView</button><button id="pv-later">Dismiss</button></div></div>
     <button class="x" id="pv-x" aria-label="Close">×</button>`;
   D.body.appendChild(root);
   root.querySelector('.n').textContent = name + ' just went live';
-  const f = root.querySelector('iframe'), cover = root.querySelector('.cover');
+  const f = root.querySelector('iframe'), cover = root.querySelector('.cover'), box = root.querySelector('.vid');
+  // Scale the 360x640 page to cover the video box.
+  const fit = () => {
+    const w = box.clientWidth, h = box.clientHeight; if (!w || !h) return;
+    const k = Math.max(w / 360, h / 640);
+    f.style.transform = `translate(${Math.round((w - 360 * k) / 2)}px,${Math.round((h - 640 * k) / 2)}px) scale(${k})`;
+  };
+  fit(); window.addEventListener('resize', fit);
   const api = window.mgvPop || {};
   D.getElementById('pv-open').onclick = () => api.open && api.open();
   D.getElementById('pv-later').onclick = () => api.close && api.close();
   D.getElementById('pv-x').onclick = () => api.close && api.close();
   if (api.onThumb) api.onThumb(url => { if (/^data:image\//.test(url || '')) cover.style.backgroundImage = `url("${url}")`; });
 
-  // Close after a while, but not while the pointer is over it.
-  let hover = false, left = 25;
-  root.onmouseenter = () => hover = true;
-  root.onmouseleave = () => hover = false;
-  const tick = setInterval(() => { if (!hover && --left <= 0) { clearInterval(tick); api.close && api.close(); } }, 1000);
+  if (mode === 'tile') {
+    // A thumbnail stays as long as the list shows it; a click opens the broadcaster.
+    root.title = 'Open in MultiGridView';
+    root.onclick = () => api.openTile && api.openTile();
+  } else {
+    // Close after a while, but not while the pointer is over it.
+    let hover = false, left = 25;
+    root.onmouseenter = () => hover = true;
+    root.onmouseleave = () => hover = false;
+    const tick = setInterval(() => { if (!hover && --left <= 0) { clearInterval(tick); api.close && api.close(); } }, 1000);
+  }
+  // One line in the Alerts log about how the preview went, for tracing problems.
+  let logged = false;
+  const report = (outcome) => {
+    if (logged || !api.log) return; logged = true;
+    let path = '', vid = '';
+    try { path = f.contentWindow.location.pathname; } catch (e) {}
+    try { const d = f.contentDocument, c = d && d.querySelector('[data-pv-v]'); if (c) vid = (c.className || c.tagName).toString().slice(0, 20) + ' ' + (c.width || c.videoWidth) + 'x' + (c.height || c.videoHeight); } catch (e) {}
+    api.log({ mode, user, outcome, path, vid });
+  };
 
   // ---------- the preview ----------
   const timers = [];
-  const stop = () => { timers.forEach(clearInterval); timers.length = 0; try { f.src = 'about:blank'; } catch (e) {} root.classList.remove('ready'); root.classList.add('still'); };
+  const stop = () => { report('stopped'); timers.forEach(clearInterval); timers.length = 0; try { f.src = 'about:blank'; } catch (e) {} root.classList.remove('ready'); root.classList.add('still'); };
   window.__mgvPreviewStop = stop;
   const findVid = d => {
     const dims = c => c.tagName === 'VIDEO' ? [c.videoWidth, c.videoHeight] : [c.width, c.height];
@@ -109,9 +140,9 @@ body > *:not(#pv){display:none !important;}
       return;
     }
     const live = (() => { try { return f.contentWindow.location.pathname.startsWith('/stream/'); } catch (e) { return false; } })();
-    if (live && videoOnly()) { if (!readyAt) readyAt = Date.now(); else if (Date.now() - readyAt > 300) root.classList.add('ready'); }
+    if (live && videoOnly()) { if (!readyAt) readyAt = Date.now(); else if (Date.now() - readyAt > 300) { if (!root.classList.contains('ready')) setTimeout(() => report('video'), 3000); root.classList.add('ready'); } }
     // No video after 20 seconds: keep the still picture and stop loading.
-    if (!root.classList.contains('ready') && Date.now() - navAt > 20000) stop();
+    if (!root.classList.contains('ready') && Date.now() - navAt > 20000) { report('no video'); stop(); }
   }, 500));
   f.src = 'https://www.tango.me/';
 })();

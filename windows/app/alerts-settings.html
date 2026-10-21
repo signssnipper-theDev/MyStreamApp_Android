@@ -38,6 +38,7 @@
   td{padding:7px 4px;border-top:1px solid var(--line)}
   td.st{width:110px} td.t{width:120px;text-align:right;color:var(--muted);font-size:12px}
   .who{display:flex;align-items:center;gap:9px;min-height:30px}
+  .vt{width:54px;height:96px;border-radius:8px;background:#000;border:1px solid var(--line2);flex:none;overflow:hidden}
   .who img{width:30px;height:30px;border-radius:7px;object-fit:cover;border:1px solid var(--line2);flex:none}
   .who button{margin-left:auto;padding:4px 10px;font-size:12px}
   .dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--off);margin-right:7px}
@@ -65,6 +66,7 @@
       <label class="sw">Sound<input type="checkbox" id="sound"></label>
       <label class="sw">Start with Windows<input type="checkbox" id="startWithWindows"></label>
       <label class="sw" title="The pop-up plays a small muted preview of the stream while it's on screen. Uses some data and briefly counts as a viewer.">Live preview in pop-ups<input type="checkbox" id="livePreview"></label>
+      <label class="sw" title="Live broadcasters in the status list show a small muted video next to their name. Uses some data and counts as a viewer while this window is open.">Live video in status list<input type="checkbox" id="liveThumbs"></label>
     </div>
     <div class="row"><label for="minutes">Check every</label>
       <select id="minutes"><option value="1">1 minute</option><option value="2">2 minutes</option><option value="5">5 minutes</option><option value="10">10 minutes</option><option value="15">15 minutes</option></select>
@@ -89,7 +91,7 @@
     if (!dirty) {
       $('users').value = s.cfg.users.join(', ');
       $('hideNames').checked = s.cfg.hideNames; $('toast').checked = s.cfg.toast; $('sound').checked = s.cfg.sound;
-      $('startWithWindows').checked = s.startWithWindows; $('livePreview').checked = s.cfg.livePreview !== false; $('minutes').value = String(s.cfg.minutes);
+      $('startWithWindows').checked = s.startWithWindows; $('livePreview').checked = s.cfg.livePreview !== false; $('liveThumbs').checked = s.cfg.liveThumbs !== false; $('minutes').value = String(s.cfg.minutes);
     }
     $('listwrap').classList.toggle('masked', $('hideNames').checked);
     const live = s.rows.filter(r => r.live).length;
@@ -101,7 +103,8 @@
     for (const r of s.rows) {
       const tr = tb.insertRow(); if (r.live) tr.className = 'live';
       const a = tr.insertCell().appendChild(document.createElement('div')); a.className = 'who';
-      if (r.live && r.thumb && /^data:image\//.test(r.thumb)) { const im = document.createElement('img'); im.alt = ''; im.src = r.thumb; a.appendChild(im); }
+      if (r.live && s.cfg.liveThumbs !== false) { const v = document.createElement('div'); v.className = 'vt'; v.dataset.user = r.user; a.appendChild(v); }
+      else if (r.live && r.thumb && /^data:image\//.test(r.thumb)) { const im = document.createElement('img'); im.alt = ''; im.src = r.thumb; a.appendChild(im); }
       a.appendChild(document.createTextNode(r.label));
       if (r.live) { const ob = document.createElement('button'); ob.textContent = 'Open'; ob.title = 'Add to MultiGridView'; ob.onclick = () => window.mgv.openGrid(r.user); a.appendChild(ob); }
       const b = tr.insertCell(); b.className = 'st'; b.innerHTML = '<span class="dot"></span><span class="lbl"></span>';
@@ -109,13 +112,26 @@
       const c = tr.insertCell(); c.className = 't'; c.textContent = ago(r.checked);
     }
     const mins = Math.max(0, Math.round((s.nextAt - Date.now()) / 60000));
+    queueTiles();
     $('next').textContent = !s.ready ? 'Connecting to Tango…' : s.running ? 'Checking now…' : s.cfg.paused ? 'Alerts are paused.' : `Next check in about ${mins < 1 ? 'a minute' : mins + ' min'}.`;
   }
-  ['users', 'hideNames', 'toast', 'sound', 'startWithWindows', 'livePreview', 'minutes'].forEach(id => $(id).addEventListener('input', () => { dirty = true; $('listwrap').classList.toggle('masked', $('hideNames').checked); }));
+  // Tell the app where each live thumbnail sits (it places the video there).
+  // Thumbnails partly scrolled out of view are hidden until fully visible again.
+  let tq = 0;
+  function queueTiles() {
+    if (tq) return;
+    tq = requestAnimationFrame(() => {
+      tq = 0;
+      const list = [...document.querySelectorAll('.vt')].map(el => { const r = el.getBoundingClientRect(); return { user: el.dataset.user, x: r.left + 1, y: r.top + 1, w: r.width - 2, h: r.height - 2, visible: r.top >= 0 && r.bottom <= innerHeight }; });
+      window.mgv.tiles && window.mgv.tiles(list);
+    });
+  }
+  addEventListener('scroll', queueTiles, true); addEventListener('resize', queueTiles);
+  ['users', 'hideNames', 'toast', 'sound', 'startWithWindows', 'livePreview', 'liveThumbs', 'minutes'].forEach(id => $(id).addEventListener('input', () => { dirty = true; $('listwrap').classList.toggle('masked', $('hideNames').checked); }));
   $('save').onclick = async () => {
     const users = $('users').value.split(/[\s,;]+/).filter(Boolean);
     dirty = false;
-    render(await window.mgv.save({ users, hideNames: $('hideNames').checked, toast: $('toast').checked, sound: $('sound').checked, startWithWindows: $('startWithWindows').checked, livePreview: $('livePreview').checked, minutes: +$('minutes').value }));
+    render(await window.mgv.save({ users, hideNames: $('hideNames').checked, toast: $('toast').checked, sound: $('sound').checked, startWithWindows: $('startWithWindows').checked, livePreview: $('livePreview').checked, liveThumbs: $('liveThumbs').checked, minutes: +$('minutes').value }));
     $('saved').textContent = 'Saved. Checking now.'; setTimeout(() => $('saved').textContent = '', 3000);
   };
   $('pause').onclick = async () => render(await window.mgv.pause(!S.cfg.paused));

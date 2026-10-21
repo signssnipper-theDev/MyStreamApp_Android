@@ -704,7 +704,7 @@ html.sp-anon .sp-chat .ln b{display:none;}
     ['Zoom', 'Scroll or pinch on a tile to zoom, drag to move, double-click to reset.'],
     ['Picture', 'Sharpen, Saturation and Color for all tiles from the PICTURE controls.'],
     ['Controls dock', 'Shrinks to a small pill in the corner; one scrollable row in narrow windows.'],
-    ['Alerts', 'Tray app with a pop-up and a small live preview when a broadcaster goes live; click to open them in the grid.'],
+    ['Alerts', 'Tray app with a pop-up and a small live preview when a broadcaster goes live; click to open them in the grid. Its status list shows a small live video next to each live broadcaster.'],
     ['Refused checks', 'If the site refuses a live check, the cell keeps checking on its own and the refusal is logged.'],
     ['Diagnostics', 'Check and grid logs in %APPDATA%\\MultiGridView Alerts for tracing problems.']
   ];

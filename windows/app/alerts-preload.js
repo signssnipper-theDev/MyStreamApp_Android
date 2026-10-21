@@ -5,6 +5,7 @@ contextBridge.exposeInMainWorld('mgv', {
   checkNow: () => ipcRenderer.invoke('mgv:check'),
   pause: p => ipcRenderer.invoke('mgv:pause', p),
   openGrid: user => ipcRenderer.send('mgv:open-grid', user),
+  tiles: list => ipcRenderer.send('mgv:tiles', list),
   onThumb: cb => ipcRenderer.on('mgv:thumb', (e, url) => cb(url)),
   onState: cb => ipcRenderer.on('mgv:state', (e, s) => cb(s)),
   popupClose: () => ipcRenderer.send('mgv:popup-close'),

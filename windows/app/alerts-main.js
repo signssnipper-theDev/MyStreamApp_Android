@@ -1,6 +1,6 @@
 // MultiGridView Alerts: a tray app that checks your broadcasters and pops up
 // an alert when one goes live. Started with: MultiGridView.exe --alerts
-const { app, BrowserWindow, Tray, Menu, Notification, ipcMain, nativeImage, shell, screen, session, net } = require('electron');
+const { app, BrowserWindow, Tray, Menu, Notification, ipcMain, nativeImage, shell, screen, session, net, WebContentsView } = require('electron');
 const fs = require('fs');
 const path = require('path');
 const { spawn } = require('child_process');
@@ -9,6 +9,7 @@ const START_URL = 'https://www.tango.me/robots.txt';
 const CHECKER = fs.readFileSync(path.join(__dirname, 'checker.js'), 'utf8');
 const PREVIEW = fs.readFileSync(path.join(__dirname, 'preview.js'), 'utf8');
 const LIVE_PREVIEWS = 2;      // at most this many pop-ups play a live preview at once
+const LIVE_TILES = 6;         // at most this many live thumbnails in the status list
 const AUMID = 'com.multigridview.alerts';
 const PARALLEL = 3;
 
@@ -29,7 +30,7 @@ if (!app.requestSingleInstanceLock()) {
 function start() {
   // ---------- settings ----------
   const CFG = path.join(app.getPath('userData'), 'alerts.json');
-  const DEF = { users: [], minutes: 2, hideNames: true, toast: true, sound: true, paused: false, livePreview: true };
+  const DEF = { users: [], minutes: 2, hideNames: true, toast: true, sound: true, paused: false, livePreview: true, liveThumbs: true };
   let cfg = { ...DEF };
   try { cfg = { ...DEF, ...JSON.parse(fs.readFileSync(CFG, 'utf8')) }; } catch (e) {}
   const save = () => { try { fs.mkdirSync(path.dirname(CFG), { recursive: true }); fs.writeFileSync(CFG, JSON.stringify(cfg, null, 2)); } catch (e) {} };
@@ -213,7 +214,7 @@ function start() {
       wc.on('did-finish-load', () => {
         if (injected || !wc.getURL().startsWith(START_URL)) return;
         injected = true;
-        wc.executeJavaScript(`window.__mgvPreview=${JSON.stringify({ user, name })};` + PREVIEW).catch(() => {});
+        wc.executeJavaScript(`window.__mgvPreview=${JSON.stringify({ user, name, mode: 'popup' })};` + PREVIEW).catch(() => {});
         if (!p.isVisible()) p.showInactive();
       });
       wc.on('did-fail-load', (e, code, desc, url, isMain) => { if (isMain && code !== -3 && !p.isDestroyed()) { p.__live = false; plainPopup(p, name); layoutPopups(); } });
@@ -249,7 +250,62 @@ function start() {
     settingsWin.setMenu(null);
     settingsWin.loadFile(path.join(__dirname, 'alerts-settings.html'));
     settingsWin.once('ready-to-show', () => settingsWin.show());
+    settingsWin.on('closed', () => { tiles.clear(); settingsWin = null; });
   }
+
+  // ---------- live thumbnails in the status list ----------
+  // The settings page reports where each live broadcaster's thumbnail goes; a small
+  // view with that broadcaster's muted video is placed there (at most LIVE_TILES).
+  const tiles = new Map();   // user -> WebContentsView
+  tiles.drop = user => {
+    const v = tiles.get(user); tiles.delete(user);
+    try { if (settingsWin && !settingsWin.isDestroyed()) settingsWin.contentView.removeChildView(v); } catch (e) {}
+    try { if (!v.webContents.isDestroyed()) v.webContents.close(); } catch (e) {}
+  };
+  tiles.clear = () => { for (const u of [...tiles.keys()]) tiles.drop(u); };
+  function makeTile(user) {
+    const v = new WebContentsView({ webPreferences: { preload: path.join(__dirname, 'preview-preload.js'), contextIsolation: true, nodeIntegration: false, sandbox: true, backgroundThrottling: false } });
+    v.setBackgroundColor('#000000');
+    const wc = v.webContents;
+    wc.__tileUser = user;
+    wc.setAudioMuted(true);
+    wc.setWindowOpenHandler(() => ({ action: 'deny' }));
+    wc.on('will-navigate', e => e.preventDefault());
+    let injected = false;
+    wc.on('did-finish-load', () => {
+      if (injected || !wc.getURL().startsWith(START_URL)) return;
+      injected = true;
+      wc.executeJavaScript(`window.__mgvPreview=${JSON.stringify({ user, name: '', mode: 'tile' })};` + PREVIEW).catch(() => {});
+    });
+    wc.loadURL(START_URL);
+    return v;
+  }
+  ipcMain.on('mgv:tiles', (e, list) => {
+    if (!settingsWin || settingsWin.isDestroyed() || e.sender !== settingsWin.webContents) return;
+    const want = new Map();
+    if (cfg.liveThumbs !== false && Array.isArray(list)) {
+      for (const t of list) {
+        if (want.size >= LIVE_TILES) break;
+        if (!t || typeof t.user !== 'string' || !cfg.users.includes(t.user) || !(status[t.user] && status[t.user].live)) continue;
+        const b = { x: Math.round(+t.x), y: Math.round(+t.y), width: Math.round(+t.w), height: Math.round(+t.h) };
+        if (![b.x, b.y, b.width, b.height].every(Number.isFinite) || b.width < 10 || b.height < 10) continue;
+        want.set(t.user, { b, shown: !!t.visible });
+      }
+    }
+    for (const u of [...tiles.keys()]) if (!want.has(u)) tiles.drop(u);
+    for (const [u, { b, shown }] of want) {
+      let v = tiles.get(u);
+      if (!v) { v = makeTile(u); tiles.set(u, v); settingsWin.contentView.addChildView(v); }
+      v.setBounds(b);
+      v.setVisible(shown);
+    }
+  });
+  ipcMain.on('mgv:tile-open', e => { if (e.sender.__tileUser) openGrid(e.sender.__tileUser); });
+  ipcMain.on('mgv:preview-log', (e, o) => {
+    if (!o || typeof o !== 'object') return;
+    const s = v => String(v == null ? '' : v).slice(0, 80);
+    checkLog({ why: 'preview', mode: s(o.mode), user: s(o.user), outcome: s(o.outcome), path: s(o.path), vid: s(o.vid) });
+  });
   function state() {
     return {
       cfg, running, nextAt, ready,
@@ -269,7 +325,7 @@ function start() {
   ipcMain.handle('mgv:get', () => state());
   ipcMain.handle('mgv:save', (e, next) => {
     const users = Array.isArray(next.users) ? [...new Set(next.users.map(s => String(s).trim().replace(/^@/, '').replace(/^https?:\/\/(www\.)?tango\.me\//, '').replace(/\/.*$/, '')).filter(s => /^[\w.\-]{1,64}$/.test(s)))] : cfg.users;
-    cfg = { ...cfg, users, minutes: [1, 2, 5, 10, 15].includes(+next.minutes) ? +next.minutes : cfg.minutes, hideNames: !!next.hideNames, toast: !!next.toast, sound: !!next.sound, livePreview: next.livePreview === undefined ? cfg.livePreview : !!next.livePreview };
+    cfg = { ...cfg, users, minutes: [1, 2, 5, 10, 15].includes(+next.minutes) ? +next.minutes : cfg.minutes, hideNames: !!next.hideNames, toast: !!next.toast, sound: !!next.sound, livePreview: next.livePreview === undefined ? cfg.livePreview : !!next.livePreview, liveThumbs: next.liveThumbs === undefined ? cfg.liveThumbs : !!next.liveThumbs };
     for (const u of Object.keys(status)) if (!users.includes(u)) delete status[u];
     save();
     if (process.platform === 'win32' && typeof next.startWithWindows === 'boolean') app.setLoginItemSettings({ openAtLogin: next.startWithWindows, path: process.execPath, args: ['--alerts'] });
