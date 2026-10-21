@@ -58,7 +58,9 @@ window.__mgvCheckDetail = async (user) => {
     const r = await fetch(base + '/stream-details-provider/public/byAlias?alias=' + encodeURIComponent(user), { credentials: 'include', cache: 'no-store' });
     status = r.status;
     if (r.status === 401 || r.status === 403) { try { err = (await r.text()).slice(0, 80); } catch (e) {} }
-    if (r.status === 404) return { live: false, status, via: 'lookup' };
+    // 404 can also mean a stream the site's lookup doesn't list (one shown only to
+    // signed-in viewers), so confirm "not live" by opening the profile as well.
+    if (r.status === 404) { const pl = await window.__mgvCheckFrame(user); return { live: pl === true, status, via: pl === true ? 'page (lookup said 404)' : 'lookup+page' }; }
     if (r.status === 200) { const b = await r.arrayBuffer(); if (b.byteLength > 0) return { live: true, status, via: 'lookup' }; }
   } catch (e) { err = e && e.message; }
   const live = await window.__mgvCheckFrame(user);

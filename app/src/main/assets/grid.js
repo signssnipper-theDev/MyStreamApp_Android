@@ -463,7 +463,16 @@ html.sp-anon .sp-chat .ln b{display:none;}
       const onStream = url().includes('/stream/');
       const info = await lookup(user);
       if (!onStream) { if (!info || info.live || ticks % 5 === 0) openUser(f, user); }
-      else if (info && !info.live) openUser(f, user);
+      else if (info && !info.live) {
+        // The site's lookup can say "not live" for streams it only shows to signed-in
+        // viewers (or while a stream is in a battle), so a playing stream would be
+        // reloaded every minute. Only go back to the profile when the stream page
+        // itself has ended too (its title no longer says it's a live stream) two minutes running.
+        let pageLive = false;
+        try { const d = f.contentDocument; pageLive = / Live Stream - Watch/.test(d.title || ''); } catch (e) {}
+        el.__ended = pageLive ? 0 : (el.__ended || 0) + 1;
+        if (el.__ended >= 2) { el.__ended = 0; openUser(f, user); }
+      } else el.__ended = 0;
     }, 60000);
     return el;
   }
