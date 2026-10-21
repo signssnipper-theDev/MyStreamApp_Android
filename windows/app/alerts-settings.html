@@ -53,8 +53,8 @@
   <header><i></i><h1>MultiGridView Alerts</h1><span id="summary"></span></header>
 
   <section>
-    <h2>BROADCASTERS TO WATCH FOR</h2>
-    <div id="listwrap"><label for="users" class="hint" style="position:absolute;left:-9999px">Broadcasters</label><textarea id="users" spellcheck="false" placeholder="username1, username2, @username3"></textarea></div>
+    <h2>FEEDS TO WATCH FOR</h2>
+    <div id="listwrap"><label for="users" class="hint" style="position:absolute;left:-9999px">Feeds</label><textarea id="users" spellcheck="false" placeholder="username1, username2, @username3"></textarea></div>
     <p class="hint">Separate with commas, spaces or new lines. You get one alert each time someone goes from offline to live.</p>
   </section>
 
@@ -66,7 +66,7 @@
       <label class="sw">Sound<input type="checkbox" id="sound"></label>
       <label class="sw">Start with Windows<input type="checkbox" id="startWithWindows"></label>
       <label class="sw" title="The pop-up plays a small muted preview of the stream while it's on screen. Uses some data and briefly counts as a viewer.">Live preview in pop-ups<input type="checkbox" id="livePreview"></label>
-      <label class="sw" title="Live broadcasters in the status list show a small muted video next to their name. Uses some data and counts as a viewer while this window is open.">Live video in status list<input type="checkbox" id="liveThumbs"></label>
+      <label class="sw" title="Live feeds in the status list show a small muted video next to their name. Uses some data and counts as a viewer while this window is open.">Live video in status list<input type="checkbox" id="liveThumbs"></label>
     </div>
     <div class="row"><label for="minutes">Check every</label>
       <select id="minutes"><option value="1">1 minute</option><option value="2">2 minutes</option><option value="5">5 minutes</option><option value="10">10 minutes</option><option value="15">15 minutes</option></select>
@@ -99,7 +99,7 @@
     $('pause').textContent = s.cfg.paused ? 'Resume alerts' : 'Pause alerts';
     $('pause').classList.toggle('on', s.cfg.paused);
     const tb = $('rows'); tb.textContent = '';
-    if (!s.rows.length) { const tr = tb.insertRow(); const td = tr.insertCell(); td.colSpan = 3; td.className = 'empty'; td.textContent = 'No broadcasters yet. Add some above and click Save and check now.'; }
+    if (!s.rows.length) { const tr = tb.insertRow(); const td = tr.insertCell(); td.colSpan = 3; td.className = 'empty'; td.textContent = 'No feeds yet. Add some above and click Save and check now.'; }
     for (const r of s.rows) {
       const tr = tb.insertRow(); if (r.live) tr.className = 'live';
       const a = tr.insertCell().appendChild(document.createElement('div')); a.className = 'who';

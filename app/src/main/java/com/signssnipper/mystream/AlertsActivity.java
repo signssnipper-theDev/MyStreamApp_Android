@@ -66,7 +66,7 @@ public class AlertsActivity extends Activity {
         head.addView(summary);
         col.addView(head);
 
-        LinearLayout list = section(col, "BROADCASTERS TO WATCH FOR");
+        LinearLayout list = section(col, "FEEDS TO WATCH FOR");
         users = new EditText(this);
         users.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_MULTI_LINE | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
         users.setMinLines(3);
@@ -161,7 +161,7 @@ public class AlertsActivity extends Activity {
             if (o != null && o.has("t")) sb.append("  ·  ").append(tf.format(new Date(o.optLong("t"))));
             sb.append('\n');
         }
-        if (list.isEmpty()) sb.append("No broadcasters yet. Add some above and tap Save and start alerts.");
+        if (list.isEmpty()) sb.append("No feeds yet. Add some above and tap Save and start alerts.");
         statusView.setText(sb.toString().trim());
         summary.setText(on ? live + " of " + list.size() + " live" : "Off");
     }

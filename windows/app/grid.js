@@ -179,15 +179,15 @@ html.sp-anon .sp-chat .ln b{display:none;}
   root.innerHTML = `
 <div id="sp-top"><div id="sp-brand"><i></i>SystemProfiles</div><div id="sp-tray" aria-label="Minimized streams"></div><div id="sp-stats"></div></div>
 <div id="sp-grid"></div>
-<div id="sp-pop" role="dialog" aria-label="Broadcaster list">
-  <h2>BROADCASTERS</h2>
-  <label for="sp-in" style="position:absolute;left:-9999px">Broadcaster list</label>
+<div id="sp-pop" role="dialog" aria-label="Feed list">
+  <h2>FEEDS</h2>
+  <label for="sp-in" style="position:absolute;left:-9999px">Feed list</label>
   <textarea id="sp-in" spellcheck="false" placeholder="username1, username2, @username3"></textarea>
   <p>Separate names with commas, spaces or new lines. Ctrl+Enter builds the grid.</p>
   <div class="sp-row"><button class="primary" id="sp-go">Build grid</button><button id="sp-popclose">Close</button></div>
 </div>
 <div id="sp-dock">
-  <div class="sp-sec"><h2>BROADCASTERS</h2><div class="sp-row"><button id="sp-edit" class="primary">Edit list</button><button id="sp-rebuild">Rebuild</button></div></div>
+  <div class="sp-sec"><h2>FEEDS</h2><div class="sp-row"><button id="sp-edit" class="primary">Edit list</button><button id="sp-rebuild">Rebuild</button></div></div>
   <div class="sp-sec"><h2>VIEW</h2><div class="sp-row"><button id="sp-anon-btn"></button><button id="sp-allhide"></button><button id="sp-fs"></button></div></div>
   <div class="sp-sec"><h2>PICTURE</h2><div class="sp-row"><button id="sp-fx-sharp"></button><button id="sp-fx-sat"></button><button id="sp-fx-tone"></button></div></div>
   <div class="sp-sec"><h2>CHAT</h2><div class="sp-row"><button id="sp-chat-btn"></button></div></div>
@@ -640,7 +640,7 @@ html.sp-anon .sp-chat .ln b{display:none;}
     store.set(KEY, JSON.stringify(list));
     tray.textContent = '';
     grid.innerHTML = '';
-    if (!list.length) { grid.innerHTML = '<div class="sp-empty">No broadcasters yet.<br>Click Edit list to add some.</div>'; grid.style.gridTemplateColumns = '1fr'; return; }
+    if (!list.length) { grid.innerHTML = '<div class="sp-empty">No feeds yet.<br>Click Edit list to add some.</div>'; grid.style.gridTemplateColumns = '1fr'; return; }
     grid.classList.remove('focus');
     layout(list.length);
     list.forEach((u, i) => grid.appendChild(cell(u, i)));
@@ -696,15 +696,15 @@ html.sp-anon .sp-chat .ln b{display:none;}
   // ---------- about ----------
   const ABOUT_FEATURES = [
     ['Account sign-in', 'Sign in from APP > Account. The grid and Alerts use your sign-in; signed out, they watch as a guest.'],
-    ['Live detection', 'The grid checks each broadcaster with your sign-in. It shares the sign-in with Alerts shortly after start, every 30 minutes and when you close Account.'],
+    ['Live detection', 'The grid checks each feed with your sign-in. It shares the sign-in with Alerts shortly after start, every 30 minutes and when you close Account.'],
     ['Video-sized cells', 'Each tile takes the shape of the video, with a maximize button to show one stream large.'],
-    ['Loading', 'While a stream connects its page shows faded; the video takes over once the broadcaster is live.'],
-    ['Cell menu', 'Picture (contrast, brightness, saturation per broadcaster), Minimize, Hide video, Move earlier/later, Remove.'],
+    ['Loading', 'While a stream connects its page shows faded; the video takes over once the feed is live.'],
+    ['Cell menu', 'Picture (contrast, brightness, saturation per feed), Minimize, Hide video, Move earlier/later, Remove.'],
     ['Rearrange', 'Drag a tile by its header, or use Move earlier/later in its menu.'],
     ['Zoom', 'Scroll or pinch on a tile to zoom, drag to move, double-click to reset.'],
     ['Picture', 'Sharpen, Saturation and Color for all tiles from the PICTURE controls.'],
     ['Controls dock', 'Shrinks to a small pill in the corner; one scrollable row in narrow windows.'],
-    ['Alerts', 'Tray app with a pop-up and a small live preview when a broadcaster goes live; click to open them in the grid. Its status list shows a small live video next to each live broadcaster.'],
+    ['Alerts', 'Tray app with a pop-up and a small live preview when a feed goes live; click to open it in the grid. Its status list shows a small live video next to each live feed.'],
     ['Refused checks', 'If the site refuses a live check, the cell keeps checking on its own and the refusal is logged.'],
     ['Diagnostics', 'Check and grid logs in %APPDATA%\\MultiGridView Alerts for tracing problems.']
   ];

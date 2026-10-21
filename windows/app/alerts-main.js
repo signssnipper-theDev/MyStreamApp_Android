@@ -47,7 +47,7 @@ function start() {
   let running = false, timer = null, nextAt = 0;
   const popups = [];
 
-  const label = u => cfg.hideNames ? 'Broadcaster ' + (cfg.users.indexOf(u) + 1) : '@' + u;
+  const label = u => cfg.hideNames ? 'Feed ' + (cfg.users.indexOf(u) + 1) : '@' + u;
   const liveCount = () => cfg.users.filter(u => status[u] && status[u].live).length;
 
   // ---------- guest session shared by the grid ----------

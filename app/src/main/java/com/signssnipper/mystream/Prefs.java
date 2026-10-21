@@ -38,7 +38,7 @@ final class Prefs {
 
     static String label(Context c, String user) {
         List<String> u = users(c);
-        return hideNames(c) ? "Broadcaster " + (u.indexOf(user) + 1) : "@" + user;
+        return hideNames(c) ? "Feed " + (u.indexOf(user) + 1) : "@" + user;
     }
 
     /** user -> {"live": 1|0, "t": millis} */

@@ -6,7 +6,7 @@
 // (or if it never is) the stream's still picture is shown instead.
 (() => {
   const P = window.__mgvPreview || {};
-  const user = String(P.user || ''), name = String(P.name || 'A broadcaster');
+  const user = String(P.user || ''), name = String(P.name || 'A feed');
   const mode = P.mode === 'tile' ? 'tile' : 'popup';
   const D = document;
   D.title = mode === 'tile' ? 'Live' : 'Live now';

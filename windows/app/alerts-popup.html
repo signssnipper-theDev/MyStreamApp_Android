@@ -38,7 +38,7 @@
 </div>
 <script>
   const q = new URLSearchParams(location.search);
-  document.getElementById('name').textContent = (q.get('name') || 'A broadcaster') + ' just went live';
+  document.getElementById('name').textContent = (q.get('name') || 'A feed') + ' just went live';
   document.getElementById('open').onclick = () => window.mgv.popupOpen();
   window.mgv.onThumb(url => {
     if (!/^data:image\//.test(url || '')) return;

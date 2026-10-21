@@ -178,15 +178,15 @@ html.sp-anon .sp-chat .ln b{display:none;}
   root.innerHTML = `
 <div id="sp-top"><div id="sp-brand"><i></i>SystemProfiles</div><div id="sp-tray" aria-label="Minimized streams"></div><div id="sp-stats"></div></div>
 <div id="sp-grid"></div>
-<div id="sp-pop" role="dialog" aria-label="Broadcaster list">
-  <h2>BROADCASTERS</h2>
-  <label for="sp-in" style="position:absolute;left:-9999px">Broadcaster list</label>
+<div id="sp-pop" role="dialog" aria-label="Feed list">
+  <h2>FEEDS</h2>
+  <label for="sp-in" style="position:absolute;left:-9999px">Feed list</label>
   <textarea id="sp-in" spellcheck="false" placeholder="username1, username2, @username3"></textarea>
   <p>Separate names with commas, spaces or new lines. Ctrl+Enter builds the grid.</p>
   <div class="sp-row"><button class="primary" id="sp-go">Build grid</button><button id="sp-popclose">Close</button></div>
 </div>
 <div id="sp-dock">
-  <div class="sp-sec"><h2>BROADCASTERS</h2><div class="sp-row"><button id="sp-edit" class="primary">Edit list</button><button id="sp-rebuild">Rebuild</button></div></div>
+  <div class="sp-sec"><h2>FEEDS</h2><div class="sp-row"><button id="sp-edit" class="primary">Edit list</button><button id="sp-rebuild">Rebuild</button></div></div>
   <div class="sp-sec"><h2>VIEW</h2><div class="sp-row"><button id="sp-anon-btn"></button><button id="sp-allhide"></button><button id="sp-fs"></button></div></div>
   <div class="sp-sec"><h2>PICTURE</h2><div class="sp-row"><button id="sp-fx-sharp"></button><button id="sp-fx-sat"></button><button id="sp-fx-tone"></button></div></div>
   <div class="sp-sec"><h2>CHAT</h2><div class="sp-row"><button id="sp-chat-btn"></button></div></div>
@@ -654,7 +654,7 @@ html.sp-anon .sp-chat .ln b{display:none;}
     store.set(KEY, JSON.stringify(list));
     tray.textContent = '';
     grid.innerHTML = '';
-    if (!list.length) { grid.innerHTML = '<div class="sp-empty">No broadcasters yet.<br>Click Edit list to add some.</div>'; grid.style.gridTemplateColumns = '1fr'; return; }
+    if (!list.length) { grid.innerHTML = '<div class="sp-empty">No feeds yet.<br>Click Edit list to add some.</div>'; grid.style.gridTemplateColumns = '1fr'; return; }
     grid.classList.remove('focus');
     layout(list.length);
     list.forEach((u, i) => grid.appendChild(cell(u, i)));
