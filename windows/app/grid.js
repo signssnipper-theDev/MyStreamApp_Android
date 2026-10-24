@@ -134,7 +134,19 @@ html.sp-anon #sp-in{-webkit-text-security:disc;color:var(--muted);}
 .sp-chat .ln b{color:var(--accent2);font-weight:700;margin-right:5px;}
 .sp-chat .ln.sys{color:#a9c2ff;font-style:italic;}
 html:not(.sp-chaton) .sp-chat{display:none;}
+.sp-cell.rec .sp-chat{display:none !important;}
 html.sp-anon .sp-chat .ln b{display:none;}
+#sp-root .sp-rec{display:none;align-items:center;gap:5px;flex:none;padding:2px 8px;border-radius:999px;background:rgba(255,77,106,.16);color:#ffb3c0;font:700 11px Figtree,system-ui,sans-serif;font-variant-numeric:tabular-nums;letter-spacing:.02em;}
+.sp-cell.rec .sp-rec{display:inline-flex;}
+.sp-rec i{width:7px;height:7px;border-radius:50%;background:var(--live);}
+@media (prefers-reduced-motion:no-preference){.sp-rec i{animation:sp-blink 1.2s steps(2,start) infinite;}}
+@keyframes sp-blink{to{visibility:hidden}}
+.sp-cell.rec{border-color:rgba(255,77,106,.7);}
+.sp-rec.nosound{background:rgba(255,186,73,.16);color:#ffd38a;}
+#sp-root .sp-menu .mi.rec{color:#ff9aa9;font-weight:600;}
+.sp-toast{position:absolute;top:calc(52px + var(--sit));left:50%;transform:translateX(-50%);max-width:min(560px,calc(100% - 24px));z-index:12;background:var(--panel);border:1px solid var(--accent);color:var(--ink);border-radius:12px;padding:10px 14px;font:13px/1.4 Figtree,system-ui,sans-serif;box-shadow:0 10px 30px rgba(0,0,0,.45);cursor:pointer;white-space:pre-line;}
+.sp-toast.bad{border-color:var(--live);}
+@container (max-width:230px){#sp-root .sp-rec b{display:none;}}
 .sp-cell{container-type:inline-size;}
 @container (max-width:230px){.sp-st,.sp-vc{display:none;}.sp-head{gap:3px;padding:5px 5px 5px 8px;}#sp-root .sp-ic{width:24px;height:24px;border-radius:6px;}}
 #sp-grid.focus .sp-cell:not(.focused){display:none;}
@@ -373,6 +385,7 @@ html.sp-anon .sp-chat .ln b{display:none;}
     el.style.order = idx;
     el.__t = [];
     el.innerHTML = `<div class="sp-head"><span class="sp-dot"></span><span class="sp-name"><span class="nm"></span><span class="an"></span> <span class="sp-st">· checking…</span></span><span class="sp-vc"></span>
+      <span class="sp-rec" title="Recording with Section Recorder"><i></i><b>REC</b> <span class="t">0:00</span></span>
       <button class="sp-ic sp-zm" title="Reset zoom" aria-label="Reset zoom">1.0×</button>
       <button class="sp-ic sp-max" title="Show this stream large" aria-label="Show this stream large">${ICON.max}</button>
       <button class="sp-ic sp-snd" title="Sound on/off" aria-label="Sound on/off">${ICON.mute}</button>
@@ -385,6 +398,7 @@ html.sp-anon .sp-chat .ln b{display:none;}
           <label>Saturation<input type="range" min="0" max="200" step="5" data-k="s" aria-label="Saturation"><span class="val"></span></label>
           <button class="mi" data-a="picreset">Reset picture</button>
         </div>
+        ${window.mgvApp && window.mgvApp.rec ? '<button class="mi rec" role="menuitem" data-a="rec">Record this feed</button>' : ''}
         <hr>
         <button class="mi" role="menuitem" data-a="mini">Minimize</button>
         <button class="mi" role="menuitem" data-a="hide">Hide video</button>
@@ -545,7 +559,11 @@ html.sp-anon .sp-chat .ln b{display:none;}
       const open = !el.classList.contains('menu-open');
       closeMenus(el);
       el.classList.toggle('menu-open', open); more.classList.toggle('on', open); more.setAttribute('aria-expanded', String(open));
-      if (open) { showPic(); hideItem.textContent = el.classList.contains('hidden') ? 'Show video' : 'Hide video'; const first = menu.querySelector('.mi'); if (first) first.focus(); }
+      if (open) {
+        showPic(); hideItem.textContent = el.classList.contains('hidden') ? 'Show video' : 'Hide video';
+        const ri = menu.querySelector('[data-a="rec"]'); if (ri) ri.textContent = el.__rec ? 'Stop recording' : 'Record this feed';
+        const first = menu.querySelector('.mi'); if (first) first.focus();
+      }
     };
     menu.querySelectorAll('input[type=range]').forEach(r => r.addEventListener('input', () => {
       picSet(user, r.dataset.k, +r.value); r.nextElementSibling.textContent = r.value + '%'; apply(f);
@@ -556,7 +574,8 @@ html.sp-anon .sp-chat .ln b{display:none;}
       if (act === 'pic') { menu.classList.toggle('pic-open'); showPic(); return; }
       if (act === 'picreset') { ['c', 'b', 's'].forEach(k => picSet(user, k, 100)); showPic(); apply(f); return; }
       closeMenus();
-      if (act === 'hide') el.classList.toggle('hidden');
+      if (act === 'rec') { if (el.__rec) stopRec(el); else startRec(el, f, user); }
+      else if (act === 'hide') el.classList.toggle('hidden');
       else if (act === 'mini') minimize(el);
       else if (act === 'earlier') moveBy(el, -1);
       else if (act === 'later') moveBy(el, 1);
@@ -583,6 +602,7 @@ html.sp-anon .sp-chat .ln b{display:none;}
     el.__chip = c; tray.appendChild(c);
   }
   function minimize(el) {
+    if (el.__rec) stopRec(el);
     if (el.classList.contains('focused')) setFocus(null);
     el.dataset.lh = el.classList.contains('live') ? '1' : '';
     unload(el);
@@ -600,6 +620,7 @@ html.sp-anon .sp-chat .ln b{display:none;}
     layout(); requestAnimationFrame(() => layout()); flash(el);
   }
   function removeCell(el) {
+    if (el.__rec) stopRec(el);
     (el.__t || []).forEach(clearInterval);
     unload(el);
     if (el.__chip) el.__chip.remove();
@@ -645,6 +666,7 @@ html.sp-anon .sp-chat .ln b{display:none;}
     layout(grid.querySelectorAll('.sp-cell').length);
   }
   function build(list) {
+    grid.querySelectorAll('.sp-cell').forEach(c => { if (c.__rec) stopRec(c); });
     (window.__spTimers || []).forEach(clearInterval); window.__spTimers = [];
     store.set(KEY, JSON.stringify(list));
     tray.textContent = '';
@@ -715,6 +737,7 @@ html.sp-anon .sp-chat .ln b{display:none;}
     ['Controls dock', 'Shrinks to a small pill in the corner; one scrollable row in narrow windows.'],
     ['Alerts', 'Tray app with a pop-up and a small live preview when a feed goes live; click to open it in the grid. Its status list shows a small live video next to each live feed.'],
     ['Refused checks', 'If the site refuses a live check, the cell keeps checking on its own and the refusal is logged.'],
+    ['Record a feed', 'Record this feed in a tile\'s menu records that tile\'s picture and sound with Section Recorder (1.6.0 or newer) on this PC. Other tiles can stay muted or playing.'],
     ['Diagnostics', 'Check and grid logs in %APPDATA%\\MultiGridView Alerts for tracing problems.']
   ];
   if (window.mgvApp && window.mgvApp.about && $('sp-about')) {
@@ -726,7 +749,7 @@ html.sp-anon .sp-chat .ln b{display:none;}
       + '<div id="sp-aboutengine" style="color:var(--muted);font-size:12px"></div>'
       + '<div style="font:700 11px Sora,system-ui,sans-serif;letter-spacing:.16em;color:var(--accent2)">FEATURES</div>'
       + '<dl id="sp-aboutlist" style="margin:0;display:grid;grid-template-columns:minmax(110px,auto) 1fr;gap:8px 14px;font-size:13px"></dl>'
-      + '<div style="color:var(--muted);font-size:12px">View-only: the app never records streams.</div>'
+      + '<div style="color:var(--muted);font-size:12px">The app records a feed only when you choose Record this feed, using Section Recorder on this PC.</div>'
       + '<div style="display:flex;justify-content:flex-end"><button id="sp-aboutclose" class="primary">Close</button></div></div>';
     root.appendChild(box);
     const dl = box.querySelector('#sp-aboutlist');
@@ -843,9 +866,15 @@ html.sp-anon .sp-chat .ln b{display:none;}
   function syncSound() {
     D.querySelectorAll('.sp-cell').forEach(c => {
       const b = c.querySelector('.sp-snd'); if (!b) return;
-      if (!b.dataset.wired) { b.dataset.wired = '1'; b.onclick = () => { const m = tangoMute(c.querySelector('iframe')); if (m) { m.click(); setTimeout(syncSound, 400); } }; }
+      if (!b.dataset.wired) {
+        b.dataset.wired = '1';
+        b.onclick = () => {
+          if (c.__rec && c.__rec.ownMute) { c.__rec.listen = !c.__rec.listen; applyListen(c.__rec); syncSound(); return; }
+          const m = tangoMute(c.querySelector('iframe')); if (m) { m.click(); setTimeout(syncSound, 400); }
+        };
+      }
       const m = c.classList.contains('live') ? tangoMute(c.querySelector('iframe')) : null;
-      const muted = !m || isMuted(m);
+      const muted = c.__rec && c.__rec.ownMute ? !c.__rec.listen : (!m || isMuted(m));
       b.disabled = !m;
       const want = muted ? 'm' : 's';
       if (b.dataset.st !== want) { b.dataset.st = want; b.innerHTML = muted ? ICON.mute : ICON.sound; }
@@ -854,6 +883,160 @@ html.sp-anon .sp-chat .ln b{display:none;}
     });
   }
   window.__spSndT = setInterval(syncSound, 1500);
+
+  // ---------- record a feed (Windows app + Section Recorder) ----------
+  // The tile's picture is captured by Section Recorder from this window; its
+  // sound comes from this feed only (see the sound hook in grid-preload.js) and
+  // is sent to Section Recorder as 48 kHz 16-bit stereo, in 100 ms chunks.
+  const WORKLET = "class SpTap extends AudioWorkletProcessor{process(i){const c=i[0];if(c&&c.length){this.port.postMessage([c[0].slice(0),(c[1]||c[0]).slice(0)]);}return true;}}registerProcessor('sp-tap',SpTap);";
+  let recCtx = null, recWorklet = null;
+  async function recAudioCtx() {
+    if (!recCtx || recCtx.state === 'closed') { recCtx = new AudioContext({ sampleRate: 48000 }); recWorklet = null; }
+    if (recCtx.state === 'suspended') { try { await recCtx.resume(); } catch (e) {} }
+    if (recWorklet === null) {
+      try { const url = URL.createObjectURL(new Blob([WORKLET], { type: 'application/javascript' })); await recCtx.audioWorklet.addModule(url); recWorklet = true; }
+      catch (e) { recWorklet = false; }
+    }
+    return recCtx;
+  }
+  const toast = (text, bad) => {
+    const n = D.createElement('div');
+    n.className = 'sp-toast' + (bad ? ' bad' : ''); n.setAttribute('role', 'status');
+    n.textContent = text; n.onclick = () => n.remove();
+    root.appendChild(n); setTimeout(() => n.remove(), bad ? 15000 : 6000);
+  };
+  const fmtT = s => { s = Math.max(0, Math.floor(s)); const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), x = s % 60; return (h ? h + ':' + String(m).padStart(2, '0') : m) + ':' + String(x).padStart(2, '0'); };
+  // Where the video shows on screen, in this window's pixels.
+  function tileRect(el, f) {
+    const body = el.querySelector('.sp-body').getBoundingClientRect();
+    let r = body;
+    try {
+      const v = f.contentDocument.querySelector('[data-sp-v]');
+      if (v) {
+        const fr = f.getBoundingClientRect(), vr = v.getBoundingClientRect();
+        const x0 = Math.max(body.left, fr.left + vr.left), y0 = Math.max(body.top, fr.top + vr.top);
+        const x1 = Math.min(body.right, fr.left + vr.right), y1 = Math.min(body.bottom, fr.top + vr.bottom);
+        if (x1 - x0 > 20 && y1 - y0 > 20) r = { left: x0, top: y0, width: x1 - x0, height: y1 - y0 };
+      }
+    } catch (e) {}
+    const d = devicePixelRatio;
+    return { x: Math.round(r.left * d), y: Math.round(r.top * d), w: Math.round(r.width * d), h: Math.round(r.height * d) };
+  }
+  function pushPCM(rec, l, r) {
+    if (rec.stopping) return;
+    for (let i = 0; i < l.length; i++) {
+      const a = Math.max(-1, Math.min(1, l[i])), b = Math.max(-1, Math.min(1, r[i]));
+      rec.chunk[rec.n++] = a * 32767; rec.chunk[rec.n++] = b * 32767;
+      const p = Math.abs(a) > Math.abs(b) ? Math.abs(a) : Math.abs(b); if (p > rec.peak) rec.peak = p;
+      if (rec.n >= rec.chunk.length) { window.mgvApp.rec.audio(rec.id, rec.chunk.buffer); rec.chunk = new Int16Array(rec.chunk.length); rec.n = 0; }
+    }
+  }
+  // Connect this feed's sound sources (they change when the stream reloads).
+  function refreshTaps(rec) {
+    const W = (() => { try { return rec.f.contentWindow; } catch (e) { return null; } })();
+    let taps = [];
+    try { taps = W && W.__spTaps ? W.__spTaps() : []; } catch (e) { rec.err = String(e && e.message); }
+    for (const t of taps) {
+      if (rec.srcs.has(t.key)) continue;
+      try { if (!t.stream.getAudioTracks().length) continue; const src = recCtx.createMediaStreamSource(t.stream); src.connect(rec.mixer); rec.srcs.set(t.key, { src, kind: t.kind }); }
+      catch (e) { rec.err = String(e && e.message); }
+    }
+    for (const [k, v] of rec.srcs) if (!taps.some(t => t.key === k)) { try { v.src.disconnect(); } catch (e) {} rec.srcs.delete(k); }
+    const kinds = new Set([...rec.srcs.values()].map(v => v.kind));
+    rec.how = [...kinds].join('+') || (W && W.__spTaps ? 'none yet' : 'no sound hook');
+    // Sound the site plays through Web Audio stops when the site is muted, so while
+    // recording the site stays unmuted and the tile's sound button only changes
+    // what you hear. Media elements are recorded even while muted.
+    const m = tangoMute(rec.f), siteMuted = !!m && isMuted(m);
+    const click = () => { if (Date.now() - (rec.clickAt || 0) > 3000) { rec.clickAt = Date.now(); m.click(); } };
+    rec.ownMute = kinds.has('webaudio') || !kinds.size;
+    if (rec.ownMute) { if (siteMuted) click(); applyListen(rec); }
+    else { if (!rec.listen && m && !siteMuted) click(); try { W && W.__spListen && W.__spListen(true); } catch (e) {} }
+  }
+  function applyListen(rec) { try { const W = rec.f.contentWindow; if (W && W.__spListen) W.__spListen(rec.listen); } catch (e) {} }
+  function recBadge(rec, text) { const t = rec.el.querySelector('.sp-rec .t'); if (t) t.textContent = text; }
+  function cleanupRec(rec) {
+    clearInterval(rec.timer);
+    for (const v of rec.srcs.values()) { try { v.src.disconnect(); } catch (e) {} }
+    rec.srcs.clear();
+    ['mixer', 'node', 'zero', 'sink'].forEach(k => { try { rec[k] && rec[k].disconnect(); } catch (e) {} });
+    try { rec.zero && rec.zero.stop(); } catch (e) {}
+    // Put the tile's sound back the way you had it.
+    try {
+      const m = tangoMute(rec.f);
+      if (rec.ownMute && !rec.listen && m && !isMuted(m)) m.click();
+      const W = rec.f.contentWindow; if (W && W.__spListen) W.__spListen(true);
+    } catch (e) {}
+    if (rec.el.__rec === rec) rec.el.__rec = null;
+    rec.el.classList.remove('rec');
+    rec.el.querySelector('.sp-rec').classList.remove('nosound');
+    syncSound();
+  }
+  async function startRec(el, f, user) {
+    if (el.__rec) return;
+    if (!el.classList.contains('live')) { toast('@' + user + ' isn\'t live right now, so there is nothing to record yet.', true); return; }
+    const rec = { id: user + '-' + Date.now(), el, f, user, srcs: new Map(), listen: true, ownMute: false, chunk: new Int16Array(4800 * 2), n: 0, peak: 0, quiet: 0, how: '' };
+    el.__rec = rec; el.classList.add('rec'); recBadge(rec, 'starting…');
+    const m0 = tangoMute(f); rec.listen = !(m0 && isMuted(m0));
+    try {
+      const ctx = await recAudioCtx();
+      rec.mixer = ctx.createGain();
+      rec.zero = ctx.createConstantSource(); rec.zero.offset.value = 0; rec.zero.connect(rec.mixer); rec.zero.start();
+      if (recWorklet) {
+        rec.node = new AudioWorkletNode(ctx, 'sp-tap', { numberOfInputs: 1, numberOfOutputs: 1, outputChannelCount: [2], channelCount: 2, channelCountMode: 'explicit' });
+        rec.node.port.onmessage = e => pushPCM(rec, e.data[0], e.data[1]);
+      } else {
+        rec.node = ctx.createScriptProcessor(4096, 2, 2);
+        rec.node.onaudioprocess = e => pushPCM(rec, e.inputBuffer.getChannelData(0), e.inputBuffer.getChannelData(1));
+      }
+      rec.sink = ctx.createGain(); rec.sink.gain.value = 0;
+      rec.mixer.connect(rec.node); rec.node.connect(rec.sink); rec.sink.connect(ctx.destination);
+      refreshTaps(rec);
+    } catch (e) { rec.err = String(e && e.message); }
+    const res = await window.mgvApp.rec.start(rec.id, { feed: '@' + user, rect: tileRect(el, f), rate: recCtx ? recCtx.sampleRate : 48000, how: rec.how });
+    let info = null; try { info = f.contentWindow.__spAudioInfo && f.contentWindow.__spAudioInfo(); } catch (e) {}
+    if (window.mgvApp.log) window.mgvApp.log({ rec: 'audio', user, how: rec.how, worklet: recWorklet, info, err: rec.err, ok: res && res.ok });
+    if (!res || !res.ok) { rec.stopping = true; cleanupRec(rec); toast('Couldn\'t start recording @' + user + '.\n' + ((res && res.error) || ''), true); return; }
+    rec.name = res.name;
+    let last = '', ticks = 0;
+    rec.timer = setInterval(() => {
+      if (!el.isConnected) { stopRec(el); return; }
+      const r = JSON.stringify(tileRect(el, f));
+      if (r !== last) { last = r; window.mgvApp.rec.rect(rec.id, JSON.parse(r)); }
+      if (++ticks % 2 === 0) refreshTaps(rec);
+    }, 500);
+    toast('Recording @' + user + ' with Section Recorder. Choose Stop recording in the tile menu to finish.');
+    syncSound();
+  }
+  function stopRec(el) {
+    const rec = el.__rec; if (!rec || rec.stopping) return;
+    rec.stopping = true;
+    if (rec.n) { window.mgvApp.rec.audio(rec.id, rec.chunk.slice(0, rec.n).buffer); rec.n = 0; }
+    clearInterval(rec.timer);
+    recBadge(rec, 'saving…');
+    window.mgvApp.rec.stop(rec.id);
+    rec.giveUp = setTimeout(() => cleanupRec(rec), 35000);
+  }
+  const recById = id => { for (const c of grid.querySelectorAll('.sp-cell')) if (c.__rec && c.__rec.id === id) return c.__rec; return null; };
+  if (window.mgvApp && window.mgvApp.rec) window.mgvApp.rec.onEvent((id, msg) => {
+    const rec = recById(id); if (!rec || !msg) return;
+    if (msg.op === 'status') {
+      if (!rec.stopping) recBadge(rec, fmtT(msg.seconds || 0));
+      rec.quiet = msg.sound === false ? rec.quiet + 1 : 0;
+      const b = rec.el.querySelector('.sp-rec');
+      b.classList.toggle('nosound', rec.quiet >= 8);
+      b.title = rec.quiet >= 8 ? 'Recording, but no sound is coming from this feed (' + rec.how + ')' : 'Recording with Section Recorder (sound: ' + rec.how + ')';
+    } else if (msg.op === 'stopped') {
+      clearTimeout(rec.giveUp); cleanupRec(rec);
+      const files = msg.files || [];
+      const name = files.length ? files[files.length - 1].split(/[\\/]/).pop() : '';
+      if (msg.error) toast('Recording of @' + rec.user + ' stopped: ' + msg.error, true);
+      else toast('Saved @' + rec.user + (name ? ': ' + name : '') + (files.length > 1 ? ' (' + files.length + ' parts)' : '') + (msg.message ? '\n' + msg.message : ''));
+    } else if (msg.op === 'error' || msg.op === 'closed') {
+      clearTimeout(rec.giveUp); cleanupRec(rec);
+      toast(msg.op === 'error' ? 'Recording of @' + rec.user + ': ' + (msg.message || 'error') : 'Section Recorder closed, so the recording of @' + rec.user + ' stopped.', true);
+    }
+  });
 
   // ---------- viewers ----------
   const num = t => { t = (t || '').trim().replace(/,/g, ''); const m = t.match(/^([\d.]+)\s*([KkMm]?)/); if (!m) return null; let v = parseFloat(m[1]); if (/k/i.test(m[2])) v *= 1e3; if (/m/i.test(m[2])) v *= 1e6; return Math.round(v); };

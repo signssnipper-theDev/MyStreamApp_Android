@@ -2,6 +2,7 @@
 // The grid script (grid.js) is injected into a tango.me page so it can reach
 // inside each Tango frame (same origin), exactly like the Claude skill does.
 const { app, BrowserWindow, Menu, shell, ipcMain, session, dialog } = require('electron');
+const recLink = require('./rec-link.js');
 const fs = require('fs');
 const path = require('path');
 
@@ -44,7 +45,9 @@ function createWindow() {
     width: 1500, height: 920, minWidth: 640, minHeight: 420,
     title: 'SystemProfiles', backgroundColor: '#000000', show: false,
     autoHideMenuBar: true,
-    webPreferences: { preload: path.join(__dirname, 'grid-preload.js'), contextIsolation: true, nodeIntegration: false, sandbox: true, backgroundThrottling: false }
+    // nodeIntegrationInSubFrames only makes the preload also run in each stream's frame
+    // (for the sound hook used by "Record this feed"); Node itself stays off.
+    webPreferences: { preload: path.join(__dirname, 'grid-preload.js'), contextIsolation: true, nodeIntegration: false, nodeIntegrationInSubFrames: true, sandbox: true, backgroundThrottling: false }
   });
   win.once('ready-to-show', () => win.show());
   win.on('page-title-updated', e => { e.preventDefault(); win.setTitle('SystemProfiles'); });
@@ -104,6 +107,7 @@ function diagLog(o) {
   } catch (e) {}
 }
 ipcMain.on('mgv:log', (e, o) => diagLog(o && typeof o === 'object' ? o : { msg: String(o) }));
+recLink.setup(() => win, diagLog);
 
 // ---------- share your sign-in with the alerts app ----------
 // Copies the site's cookies (your sign-in, or the guest session when signed out)

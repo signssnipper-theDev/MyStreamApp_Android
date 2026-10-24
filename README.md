@@ -15,7 +15,8 @@ Every push to `main` builds the APK on GitHub (Actions) and publishes it as a re
 Builds are signed with the key stored in the repository secrets `KEYSTORE_B64` and `KEYSTORE_PASSWORD`.
 Without those secrets a test (debug) build is published instead.
 
-The grid is view-only. The app never records streams and never signs in to an account.
+The Android grid is view-only: it never records streams. On Windows, a feed is recorded only when you choose
+**Record this feed** in its tile menu, which uses Section Recorder (1.6.0 or newer) on the same PC.
 
 ## Windows app (`windows/`)
 MultiGridView for Windows: the same grid plus **MultiGridView Alerts**, built into a normal installer.
@@ -23,4 +24,6 @@ MultiGridView for Windows: the same grid plus **MultiGridView Alerts**, built in
 - Download `MultiGridView-Setup-<version>.exe` from the newest **win-v…** release and double-click it.
 - Windows may show "Windows protected your PC" (the installer isn't code-signed): **More info** > **Run anyway**.
 - Installs for your account only, updates in place, keeps your settings. Uninstall from Settings > Apps.
+- **Record this feed** (tile menu): records that tile's picture and that feed's own sound with Section Recorder.
+  The sound comes only from that feed, even while the tile is muted. See `windows/app/rec-link.js`.
 - To publish a new version: change the files in `windows/app/`, bump `windows/VERSION`, push.
