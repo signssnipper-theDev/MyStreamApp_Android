@@ -54,8 +54,20 @@ body > *:not(#sp-root){display:none !important;}
 #sp-root button.on{background:var(--tint);border-color:var(--accent);color:#cfe0ff;}
 #sp-root button.primary{background:var(--accent);border-color:var(--accent);color:#fff;}
 #sp-top{position:absolute;top:calc(10px + var(--sit));left:calc(12px + var(--sil));right:calc(12px + var(--sir));height:32px;display:flex;align-items:center;gap:10px;}
-#sp-tray{display:flex;gap:6px;min-width:0;overflow-x:auto;scrollbar-width:none;}
-#sp-tray::-webkit-scrollbar{display:none;}
+/* Minimized feeds: a list down the left side, shown only while something is minimized
+   (a horizontal row at the top on phone-sized screens). */
+#sp-tray{display:none;position:fixed;top:calc(52px + var(--sit));left:calc(10px + var(--sil));bottom:var(--gridb,92px);width:190px;flex-direction:column;gap:6px;padding:8px;box-sizing:border-box;background:var(--panel);border:1px solid var(--line);border-radius:14px;overflow-y:auto;scrollbar-width:thin;z-index:3;}
+html.sp-hasmini #sp-tray{display:flex;}
+html.sp-hasmini #sp-grid{left:calc(210px + var(--sil));}
+html.sp-hasmini.sp-traycol #sp-tray{width:48px;padding:8px 6px;}
+html.sp-hasmini.sp-traycol #sp-grid{left:calc(68px + var(--sil));}
+.sp-trayhead{display:flex;align-items:center;justify-content:space-between;gap:6px;padding:0 2px 4px;font:700 10px Sora,system-ui,sans-serif;letter-spacing:.14em;color:var(--accent2);}
+#sp-root .sp-trayhead button{padding:2px 8px;border-radius:8px;font-size:12px;}
+html.sp-traycol .sp-trayhead span{display:none;}
+#sp-tray .sp-chip{width:100%;box-sizing:border-box;justify-content:flex-start;border-radius:10px;padding:7px 9px;text-align:left;}
+#sp-tray .sp-chip .nm,#sp-tray .sp-chip .an{overflow:hidden;text-overflow:ellipsis;min-width:0;}
+html.sp-traycol #sp-tray .sp-chip{justify-content:center;padding:8px 0;}
+html.sp-traycol #sp-tray .sp-chip .nm,html.sp-traycol #sp-tray .sp-chip .an{display:none !important;}
 #sp-root .sp-chip{display:flex;align-items:center;gap:6px;padding:4px 10px;border-radius:999px;font-weight:500;font-size:12px;flex:none;}
 .sp-chip .an{display:none;} html.sp-anon .sp-chip .nm{display:none;} html.sp-anon .sp-chip .an{display:inline;}
 .sp-chip.live .sp-dot{background:var(--live);box-shadow:0 0 0 3px rgba(255,77,106,.2);}
@@ -153,6 +165,10 @@ html.sp-anon .sp-chat .ln b{display:none;}
 @media (max-width:560px){
   #sp-brand{font-size:13px;} #sp-stats{padding:4px 10px;font-size:12px;}
   #sp-top{gap:8px;}
+  html.sp-hasmini #sp-tray{position:static;flex-direction:row;width:auto;padding:0;background:none;border:0;overflow-x:auto;overflow-y:hidden;min-width:0;}
+  html.sp-hasmini #sp-grid,html.sp-hasmini.sp-traycol #sp-grid{left:calc(10px + var(--sil));}
+  .sp-trayhead{display:none;}
+  #sp-tray .sp-chip{width:auto;border-radius:999px;}
 }
 @media (pointer:coarse){
   #sp-root button{min-height:36px;}
@@ -216,7 +232,7 @@ html.sp-anon .sp-chat .ln b{display:none;}
       const k = Math.min(vw * r / iw, vh * r / ih);
       const dw = Math.max(1, Math.floor(iw * k)), dh = Math.max(1, Math.floor(ih * k));
       const left = Math.floor((vw * r - dw) / 2) / r, top = Math.floor((vh * r - dh) / 2) / r;
-      const css = `body *{visibility:hidden !important;} html,body{background:#000 !important;}
+      const css = `body *{visibility:hidden !important;} html,body{background:#000 !important;overflow:hidden !important;margin:0 !important;}
         [data-sp-v]{visibility:visible !important;position:fixed !important;left:${left}px !important;top:${top}px !important;right:auto !important;bottom:auto !important;margin:0 !important;transform:none !important;width:${dw / r}px !important;height:${dh / r}px !important;max-width:none !important;max-height:none !important;object-fit:contain !important;filter:none !important;}`;
       if (s.textContent !== css) s.textContent = css;
       return true;
@@ -403,6 +419,9 @@ html.sp-anon .sp-chat .ln b{display:none;}
     }
     else openUser(f, user);
     wireZoom(f, el, user); applyZoom(f, el, user);
+    el.__fitZoom = () => applyZoom(f, el, user);
+    f.setAttribute('scrolling', 'no');
+    if (fitObs) fitObs.observe(el.querySelector('.sp-body'));
     wireMenu(el, f, user);
     wireDrag(el);
     el.querySelector('.sp-max').onclick = () => setFocus(el);
@@ -424,10 +443,15 @@ html.sp-anon .sp-chat .ln b{display:none;}
       // "Not live" only after the cell has had time to reach the profile.
       const off = !live && checks > 20;
       el.classList.toggle('off', off);
-      msg.textContent = live ? 'Starting video…' : off ? 'Not live right now' : 'Connecting…';
+      // Signed out, a feed that only signed-in viewers can watch looks offline. When the
+      // page shows its sign-in prompt, say so instead of just "not live".
+      let guest = false;
+      if (off) { try { guest = /Continue with (Email|Phone)/.test((f.contentDocument.body || {}).innerText || ''); } catch (e) {} }
+      el.classList.toggle('guest', off && guest);
+      msg.textContent = live ? 'Starting video…' : off ? (guest ? 'Not live, or only visible when signed in. Sign in from APP > Account to see it.' : 'Not live right now') : 'Connecting…';
       const dn = disp();
       nm.textContent = '@' + user + (dn ? ' (' + dn + ')' : '');
-      st.textContent = live ? '· LIVE' : '· not live';
+      st.textContent = live ? '· LIVE' : (off && guest) ? '· not live (signed out)' : '· not live';
     };
     // Fast checks while the cell is getting ready, then every 4 seconds.
     const every = (fn, ms) => { const id = setInterval(fn, ms); el.__t.push(id); window.__spTimers.push(id); };
@@ -573,14 +597,28 @@ html.sp-anon .sp-chat .ln b{display:none;}
     try { f.src = 'about:blank'; } catch (e) {}
     el.classList.remove('vready', 'live', 'off', 'menu-open');
   }
+  // Show or hide the minimized list (and give the grid its space back).
+  const trayHead = D.createElement('div');
+  trayHead.className = 'sp-trayhead';
+  trayHead.innerHTML = '<span>MINIMIZED</span><button type="button" id="sp-traycol"></button>';
+  tray.appendChild(trayHead);
+  const trayBtn = trayHead.querySelector('button');
+  const trayCol = on => { H.classList.toggle('sp-traycol', on); trayBtn.textContent = on ? '\u203a' : '\u2039'; trayBtn.title = on ? 'Show names' : 'Narrow the list'; trayBtn.setAttribute('aria-label', trayBtn.title); };
+  trayCol(store.get('sp_tray_col') === '1');
+  trayBtn.onclick = () => { const on = !H.classList.contains('sp-traycol'); trayCol(on); store.set('sp_tray_col', on ? '1' : '0'); layout(); requestAnimationFrame(() => layout()); };
+  function updTray() {
+    const had = H.classList.contains('sp-hasmini'), has = !!tray.querySelector('.sp-chip');
+    H.classList.toggle('sp-hasmini', has);
+    if (had !== has) requestAnimationFrame(() => layout());
+  }
   function addChip(el) {
     if (el.__chip) return;
     const c = D.createElement('button');
-    c.className = 'sp-chip'; c.title = 'Bring this stream back';
+    c.className = 'sp-chip'; c.title = 'Bring @' + el.dataset.user + ' back';
     c.innerHTML = '<span class="sp-dot"></span><span class="nm"></span><span class="an"></span>';
     c.querySelector('.nm').textContent = '@' + el.dataset.user;
     c.onclick = () => restore(el);
-    el.__chip = c; tray.appendChild(c);
+    el.__chip = c; tray.appendChild(c); updTray();
   }
   function minimize(el) {
     if (el.classList.contains('focused')) setFocus(null);
@@ -595,6 +633,7 @@ html.sp-anon .sp-chat .ln b{display:none;}
     el.classList.remove('mini');
     minis.delete(el.dataset.user.toLowerCase()); saveMinis();
     if (el.__chip) { el.__chip.remove(); el.__chip = null; }
+    updTray();
     if (el.__resetChecks) el.__resetChecks();
     openUser(el.querySelector('iframe'), el.dataset.user);
     layout(); requestAnimationFrame(() => layout()); flash(el);
@@ -602,7 +641,8 @@ html.sp-anon .sp-chat .ln b{display:none;}
   function removeCell(el) {
     (el.__t || []).forEach(clearInterval);
     unload(el);
-    if (el.__chip) el.__chip.remove();
+    if (el.__chip) { el.__chip.remove(); el.__chip = null; }
+    updTray();
     if (el.classList.contains('focused')) grid.classList.remove('focus');
     el.remove();
     minis.delete(el.dataset.user.toLowerCase()); saveMinis();
@@ -616,7 +656,7 @@ html.sp-anon .sp-chat .ln b{display:none;}
     const all = grid.querySelectorAll('.sp-cell').length;
     let n = grid.querySelectorAll('.sp-cell:not(.mini)').length;
     let hint = grid.querySelector('.sp-allmini');
-    if (all && !n) { if (!hint) { hint = D.createElement('div'); hint.className = 'sp-empty sp-allmini'; hint.textContent = 'All streams are minimized. Click a name at the top to bring one back.'; grid.appendChild(hint); } }
+    if (all && !n) { if (!hint) { hint = D.createElement('div'); hint.className = 'sp-empty sp-allmini'; hint.textContent = 'All feeds are minimized. Click a name in the list on the left to bring one back.'; grid.appendChild(hint); } }
     else if (hint) hint.remove();
     if (grid.classList.contains('focus')) n = 1;
     if (!n) return;
@@ -635,6 +675,13 @@ html.sp-anon .sp-chat .ln b{display:none;}
     grid.style.gridTemplateRows = `repeat(${rows}, ${Math.floor(vw * 16 / 9) + padY}px)`;
     setTimeout(() => D.querySelectorAll('.sp-cell.live iframe').forEach(styleInner), 60);
   }
+  // Refit a cell's video whenever the cell changes size (window resize, maximize,
+  // controls opening or closing, the minimized list appearing), so it never spills
+  // over the cell and the stream page never scrolls.
+  const fitObs = typeof ResizeObserver === 'function' ? new ResizeObserver(es => es.forEach(e => {
+    const f = e.target.querySelector('iframe'), cell = e.target.closest('.sp-cell');
+    if (f && cell && cell.classList.contains('live')) { styleInner(f); if (cell.__fitZoom) cell.__fitZoom(); }
+  })) : null;
   function setFocus(el) {
     const on = el && !el.classList.contains('focused');
     grid.querySelectorAll('.sp-cell').forEach(c => {
@@ -647,7 +694,7 @@ html.sp-anon .sp-chat .ln b{display:none;}
   function build(list) {
     (window.__spTimers || []).forEach(clearInterval); window.__spTimers = [];
     store.set(KEY, JSON.stringify(list));
-    tray.textContent = '';
+    tray.querySelectorAll('.sp-chip').forEach(c => c.remove()); updTray();
     grid.innerHTML = '';
     if (!list.length) { grid.innerHTML = '<div class="sp-empty">No feeds yet.<br>Click Edit list to add some.</div>'; grid.style.gridTemplateColumns = '1fr'; return; }
     grid.classList.remove('focus');
@@ -706,13 +753,15 @@ html.sp-anon .sp-chat .ln b{display:none;}
   const ABOUT_FEATURES = [
     ['Account sign-in', 'Sign in from APP > Account. The grid and Alerts use your sign-in; signed out, they watch as a guest.'],
     ['Live detection', 'The grid checks each feed with your sign-in. It shares the sign-in with Alerts shortly after start, every 30 minutes and when you close Account.'],
-    ['Video-sized cells', 'Each tile takes the shape of the video, with a maximize button to show one stream large.'],
+    ['Video-sized cells', 'Each tile takes the shape of the video and the video is refitted whenever the tile changes size, so it never spills over or scrolls. A maximize button shows one feed large.'],
     ['Loading', 'While a stream connects its page shows faded; the video takes over once the feed is live.'],
     ['Cell menu', 'Picture (contrast, brightness, saturation per feed), Minimize, Hide video, Move earlier/later, Remove.'],
     ['Rearrange', 'Drag a tile by its header, or use Move earlier/later in its menu.'],
     ['Zoom', 'Scroll or pinch on a tile to zoom, drag to move, double-click to reset.'],
     ['Picture', 'Sharpen, Saturation and Color for all tiles from the PICTURE controls.'],
     ['Controls dock', 'Shrinks to a small pill in the corner; one scrollable row in narrow windows.'],
+    ['Minimized feeds', 'Listed down the left side with a live dot; click one to bring it back. The list can be narrowed to just the dots.'],
+    ['Signed-out view', 'When you are signed out, a feed only signed-in viewers can watch says so instead of just showing as offline.'],
     ['Alerts', 'Tray app with a pop-up and a small live preview when a feed goes live; click to open it in the grid. Its status list shows a small live video next to each live feed.'],
     ['Refused checks', 'If the site refuses a live check, the cell keeps checking on its own and the refusal is logged.'],
     ['Diagnostics', 'Check and grid logs in %APPDATA%\\MultiGridView Alerts for tracing problems.']
