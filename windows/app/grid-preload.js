@@ -3,5 +3,6 @@ const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('mgvApp', {
   openAccount: () => ipcRenderer.send('mgv:account'),
   about: () => ipcRenderer.invoke('mgv:about'),
-  log: o => ipcRenderer.send('mgv:log', o)
+  log: o => ipcRenderer.send('mgv:log', o),
+  names: o => ipcRenderer.send('mgv:names', o)
 });

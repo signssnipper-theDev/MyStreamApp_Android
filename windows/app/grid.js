@@ -102,6 +102,11 @@ html.sp-anon .sp-name .nm{display:none;} html.sp-anon .sp-name .an{display:inlin
 .sp-cell:not(.live) iframe{opacity:.35;}
 .sp-wait{position:absolute;inset:0;z-index:1;background:#000;display:grid;place-items:center;align-content:center;gap:10px;color:var(--muted);font-size:13px;text-align:center;padding:12px;}
 .sp-wait{display:none !important;}
+/* Not live (after the connecting time): hide the page and show only "Not live". */
+.sp-cell.off:not(.live) .sp-wait{display:grid !important;}
+.sp-cell.off:not(.live) iframe{visibility:hidden !important;}
+.sp-cell.off:not(.live) .sp-msg{font:600 15px Figtree,system-ui,sans-serif;color:var(--muted);max-width:220px;}
+.sp-cell.off.guest:not(.live) .sp-msg{font-size:13px;}
 .sp-spin{width:22px;height:22px;border-radius:50%;border:2px solid var(--line2);border-top-color:var(--accent2);animation:sp-spin 1s linear infinite;}
 .sp-cell.off .sp-spin{display:none;}
 @keyframes sp-spin{to{transform:rotate(360deg)}}
@@ -149,7 +154,6 @@ html:not(.sp-chaton) .sp-chat{display:none;}
 html.sp-anon .sp-chat .ln b{display:none;}
 .sp-cell{container-type:inline-size;}
 @container (max-width:230px){.sp-st,.sp-vc{display:none;}.sp-head{gap:3px;padding:5px 5px 5px 8px;}#sp-root .sp-ic{width:24px;height:24px;border-radius:6px;}}
-#sp-grid.focus .sp-cell:not(.focused){display:none;}
 #sp-root .sp-cell.focused .sp-max{background:var(--tint);border-color:var(--accent);color:#cfe0ff;}
 .sp-empty{position:absolute;inset:0;display:grid;place-items:center;color:var(--muted);text-align:center;font-size:14px;}
 /* Narrower windows and phones: the controls become one full-width row that scrolls
@@ -411,7 +415,7 @@ html.sp-anon .sp-chat .ln b{display:none;}
       </div>
       <div class="sp-body"><div class="sp-wait"><div class="sp-spin"></div><div class="sp-msg">Connecting…</div></div><iframe allow="autoplay; fullscreen"></iframe><div class="sp-zoomer" title="Scroll or pinch to zoom, drag to move, double-click to reset"></div></div>`;
     const f = el.querySelector('iframe'), nm = el.querySelector('.nm'), st = el.querySelector('.sp-st');
-    nm.textContent = '@' + user;
+    showName(el, user);
     el.querySelector('.an').textContent = 'Cell ' + (idx + 1);
     if (minis.has(user.toLowerCase())) {
       el.classList.add('mini'); f.dataset.user = user; addChip(el);
@@ -448,9 +452,12 @@ html.sp-anon .sp-chat .ln b{display:none;}
       let guest = false;
       if (off) { try { guest = /Continue with (Email|Phone)/.test((f.contentDocument.body || {}).innerText || ''); } catch (e) {} }
       el.classList.toggle('guest', off && guest);
-      msg.textContent = live ? 'Starting video…' : off ? (guest ? 'Not live, or only visible when signed in. Sign in from APP > Account to see it.' : 'Not live right now') : 'Connecting…';
+      msg.textContent = live ? 'Starting video…' : off ? (guest ? 'Not live (signed out). Sign in from APP > Account to see feeds shown only to signed-in viewers.' : 'Not live') : 'Connecting…';
       const dn = disp();
-      nm.textContent = '@' + user + (dn ? ' (' + dn + ')' : '');
+      // Only trust the name on this feed's own page (its stream or its profile).
+      let pth = ''; try { pth = f.contentWindow.location.pathname.toLowerCase(); } catch (e) {}
+      if (dn && (pth.startsWith('/stream/') || pth === '/' + user.toLowerCase())) setName(user, dn);
+      showName(el, user);
       st.textContent = live ? '· LIVE' : (off && guest) ? '· not live (signed out)' : '· not live';
     };
     // Fast checks while the cell is getting ready, then every 4 seconds.
@@ -611,12 +618,30 @@ html.sp-anon .sp-chat .ln b{display:none;}
     H.classList.toggle('sp-hasmini', has);
     if (had !== has) requestAnimationFrame(() => layout());
   }
+  // ---------- display names ----------
+  // Feeds show their display name (from the feed's page) instead of the @handle; the
+  // handle stays in the tooltip. Names are remembered, so they show straight away
+  // next time, and are shared with Alerts.
+  let names = {}; try { names = JSON.parse(store.get('sp_names') || '{}') || {}; } catch (e) { names = {}; }
+  const nameOf = u => names[String(u).toLowerCase()] || '@' + u;
+  function setName(u, dn) {
+    dn = String(dn).replace(/\s+/g, ' ').trim().slice(0, 40); const k = String(u).toLowerCase();
+    if (!dn || names[k] === dn) return;
+    names[k] = dn; store.set('sp_names', JSON.stringify(names));
+    if (window.mgvApp && window.mgvApp.names) window.mgvApp.names(names);
+  }
+  function showName(el, u) {
+    const nm = el.querySelector('.sp-name .nm'); if (nm && nm.textContent !== nameOf(u)) nm.textContent = nameOf(u);
+    const nmw = el.querySelector('.sp-name'); if (nmw) nmw.title = '@' + u;
+    if (el.__chip) { const c = el.__chip.querySelector('.nm'); if (c.textContent !== nameOf(u)) c.textContent = nameOf(u); }
+  }
+  if (window.mgvApp && window.mgvApp.names && Object.keys(names).length) window.mgvApp.names(names);
   function addChip(el) {
     if (el.__chip) return;
     const c = D.createElement('button');
     c.className = 'sp-chip'; c.title = 'Bring @' + el.dataset.user + ' back';
     c.innerHTML = '<span class="sp-dot"></span><span class="nm"></span><span class="an"></span>';
-    c.querySelector('.nm').textContent = '@' + el.dataset.user;
+    c.querySelector('.nm').textContent = nameOf(el.dataset.user);
     c.onclick = () => restore(el);
     el.__chip = c; tray.appendChild(c); updTray();
   }
@@ -658,11 +683,34 @@ html.sp-anon .sp-chat .ln b{display:none;}
     let hint = grid.querySelector('.sp-allmini');
     if (all && !n) { if (!hint) { hint = D.createElement('div'); hint.className = 'sp-empty sp-allmini'; hint.textContent = 'All feeds are minimized. Click a name in the list on the left to bring one back.'; grid.appendChild(hint); } }
     else if (hint) hint.remove();
-    if (grid.classList.contains('focus')) n = 1;
     if (!n) return;
     const W = grid.clientWidth || innerWidth - 20, Hh = grid.clientHeight || innerHeight - 150;
     const head = (grid.querySelector('.sp-cell:not(.mini) .sp-head') || {}).offsetHeight || 40;
     const gap = 10, padX = 14, padY = head + 8;   // borders + side margins / header + bottom margin
+    grid.querySelectorAll('.sp-cell').forEach(c => { c.style.gridRow = ''; c.style.gridColumn = ''; });
+    const big = grid.classList.contains('focus') && grid.querySelector('.sp-cell.focused:not(.mini)');
+    if (big) {
+      // Maximized: the chosen feed large, every other feed still playing as small tiles
+      // in columns beside it.
+      const others = cellsInOrder().filter(c => c !== big && !c.classList.contains('mini'));
+      const k = others.length;
+      let rs = 1, cs = 0, sw = 0;
+      if (k) {
+        const minH = 150;                                    // smallest small tile, header included
+        rs = Math.max(1, Math.min(k, Math.floor((Hh + gap) / (minH + gap))));
+        cs = Math.ceil(k / rs);
+        const rowH = (Hh - gap * (rs - 1)) / rs;
+        sw = Math.max(50, Math.floor((rowH - padY) * 9 / 16));
+      }
+      const stripW = cs ? cs * (sw + padX) + cs * gap : 0;
+      const bw = Math.max(80, Math.floor(Math.min(W - stripW - padX, (Hh - padY) * 9 / 16)));
+      grid.style.gridTemplateColumns = `${bw + padX}px` + (cs ? ` repeat(${cs}, ${sw + padX}px)` : '');
+      grid.style.gridTemplateRows = `repeat(${rs}, ${Math.floor((Hh - gap * (rs - 1)) / rs)}px)`;
+      big.style.gridColumn = '1'; big.style.gridRow = `1 / span ${rs}`;
+      others.forEach((c, i) => { c.style.gridColumn = String(2 + Math.floor(i / rs)); c.style.gridRow = String(1 + (i % rs)); });
+      setTimeout(() => D.querySelectorAll('.sp-cell.live iframe').forEach(styleInner), 60);
+      return;
+    }
     let best = 1, bestW = 0;
     for (let cols = 1; cols <= n; cols++) {
       const rows = Math.ceil(n / cols);
@@ -686,7 +734,7 @@ html.sp-anon .sp-chat .ln b{display:none;}
     const on = el && !el.classList.contains('focused');
     grid.querySelectorAll('.sp-cell').forEach(c => {
       c.classList.toggle('focused', on && c === el);
-      const b = c.querySelector('.sp-max'); if (b) { const f = on && c === el; b.innerHTML = f ? ICON.unmax : ICON.max; b.title = f ? 'Back to the grid' : 'Show this stream large'; b.setAttribute('aria-label', b.title); }
+      const b = c.querySelector('.sp-max'); if (b) { const f = on && c === el; b.innerHTML = f ? ICON.unmax : ICON.max; b.title = f ? 'Back to the grid' : on ? 'Show this feed large instead' : 'Show this feed large'; b.setAttribute('aria-label', b.title); }
     });
     grid.classList.toggle('focus', !!on);
     layout(grid.querySelectorAll('.sp-cell').length);
@@ -753,7 +801,7 @@ html.sp-anon .sp-chat .ln b{display:none;}
   const ABOUT_FEATURES = [
     ['Account sign-in', 'Sign in from APP > Account. The grid and Alerts use your sign-in; signed out, they watch as a guest.'],
     ['Live detection', 'The grid checks each feed with your sign-in. It shares the sign-in with Alerts shortly after start, every 30 minutes and when you close Account.'],
-    ['Video-sized cells', 'Each tile takes the shape of the video and the video is refitted whenever the tile changes size, so it never spills over or scrolls. A maximize button shows one feed large.'],
+    ['Video-sized cells', 'Each tile takes the shape of the video and the video is refitted whenever the tile changes size, so it never spills over or scrolls. A maximize button shows one feed large with the others still playing beside it.'],
     ['Loading', 'While a stream connects its page shows faded; the video takes over once the feed is live.'],
     ['Cell menu', 'Picture (contrast, brightness, saturation per feed), Minimize, Hide video, Move earlier/later, Remove.'],
     ['Rearrange', 'Drag a tile by its header, or use Move earlier/later in its menu.'],
@@ -761,6 +809,8 @@ html.sp-anon .sp-chat .ln b{display:none;}
     ['Picture', 'Sharpen, Saturation and Color for all tiles from the PICTURE controls.'],
     ['Controls dock', 'Shrinks to a small pill in the corner; one scrollable row in narrow windows.'],
     ['Minimized feeds', 'Listed down the left side with a live dot; click one to bring it back. The list can be narrowed to just the dots.'],
+    ['Not live', 'A feed that is not live shows just "Not live" in its tile; its video comes up by itself when it goes live.'],
+    ['Display names', 'Tiles, the minimized list and Alerts show each feed\'s display name; hover a name to see its @handle.'],
     ['Signed-out view', 'When you are signed out, a feed only signed-in viewers can watch says so instead of just showing as offline.'],
     ['Alerts', 'Tray app with a pop-up and a small live preview when a feed goes live; click to open it in the grid. Its status list shows a small live video next to each live feed.'],
     ['Refused checks', 'If the site refuses a live check, the cell keeps checking on its own and the refusal is logged.'],

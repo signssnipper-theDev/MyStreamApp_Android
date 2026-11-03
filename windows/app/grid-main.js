@@ -104,6 +104,13 @@ function diagLog(o) {
   } catch (e) {}
 }
 ipcMain.on('mgv:log', (e, o) => diagLog(o && typeof o === 'object' ? o : { msg: String(o) }));
+// Display names seen by the grid, shared with Alerts (handle -> name).
+ipcMain.on('mgv:names', (e, o) => {
+  if (!o || typeof o !== 'object') return;
+  const out = {};
+  for (const [k, v] of Object.entries(o).slice(0, 500)) if (/^[\w.\-]{1,64}$/.test(k) && typeof v === 'string') out[k.toLowerCase()] = v.slice(0, 40);
+  try { fs.mkdirSync(path.dirname(DIAG), { recursive: true }); fs.writeFileSync(path.join(path.dirname(DIAG), 'names.json'), JSON.stringify(out)); } catch (e) {}
+});
 
 // ---------- share your sign-in with the alerts app ----------
 // Copies the site's cookies (your sign-in, or the guest session when signed out)

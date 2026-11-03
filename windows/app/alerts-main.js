@@ -47,7 +47,10 @@ function start() {
   let running = false, timer = null, nextAt = 0;
   const popups = [];
 
-  const label = u => cfg.hideNames ? 'Feed ' + (cfg.users.indexOf(u) + 1) : '@' + u;
+  // Display names come from the grid (names.json); the @handle until the grid has seen one.
+  let names = {}, namesAt = 0;
+  const loadNames = () => { if (Date.now() - namesAt < 30000) return; namesAt = Date.now(); try { names = JSON.parse(fs.readFileSync(path.join(app.getPath('userData'), 'names.json'), 'utf8')) || {}; } catch (e) {} };
+  const label = u => { if (cfg.hideNames) return 'Feed ' + (cfg.users.indexOf(u) + 1); loadNames(); return names[String(u).toLowerCase()] || '@' + u; };
   const liveCount = () => cfg.users.filter(u => status[u] && status[u].live).length;
 
   // ---------- guest session shared by the grid ----------
